@@ -1,36 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# LSMS
 
-## Getting Started
+Laboratory Science Management System for the Research and Laboratory Services Center.
 
-First, run the development server:
+## Current implementation status
 
-```bash
+The Next.js 16 project foundation is initialized. It includes a public entry page, PostgreSQL/Drizzle connection wiring, environment validation, a separate Better Auth table definition, and centralized role permissions. The existing `lsms` database has **not yet been introspected**, so authentication and the operational modules are not implemented or available. No existing database table has been modified.
+
+## Stack and architecture
+
+Next.js 16 App Router, React, TypeScript, Tailwind CSS, PostgreSQL, Drizzle ORM with postgres.js, Better Auth, Zod, Lucide React, Recharts, qrcode, pdf-lib, Vitest, and Playwright. The intended architecture is a modular monolith: routes and components call server-side authorization and validation, then domain services and database queries. PostgreSQL remains the source of truth.
+
+## Prerequisites
+
+- Node.js 24 or newer and npm
+- The existing PostgreSQL database named `lsms`
+- A database account with read access to schema metadata and the permissions required by the eventual application
+
+## Environment
+
+Copy `.env.example` to `.env.local` and set:
+
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | Connection to the existing PostgreSQL `lsms` database |
+| `BETTER_AUTH_SECRET` | Random secret of at least 32 characters |
+| `BETTER_AUTH_URL` | Server origin, such as `http://localhost:3000` |
+| `NEXT_PUBLIC_APP_URL` | Public application origin |
+| `INITIAL_SETUP_TOKEN` | Random first-run setup token of at least 24 characters |
+
+Do not commit `.env.local`. The `.env.example` file contains placeholders only.
+
+## Install and run
+
+```sh
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The current public entry page is available at `http://localhost:3000`. The login and registration routes are pending database introspection and implementation.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Existing database integration
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Once `DATABASE_URL` is available, inspect the schema with:
 
-## Learn More
+```sh
+npm run db:pull
+```
 
-To learn more about Next.js, take a look at the following resources:
+This uses a read-only Drizzle Kit `pull` configuration and writes generated TypeScript schema files under `src/db/introspected`. **Do not run `drizzle-kit push` against the existing database.** The separate Better Auth tables are defined in `src/db/auth-schema.ts`; their migration must be reviewed against the introspected `users.auth_user_id` type before applying it. No migration has been executed.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Roles and first-run setup
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The authorization roles are Super Admin, Admin, and Student/Faculty. Student versus Faculty is a profile classification, not a separate authorization role. Permission definitions are in `src/lib/permissions.ts`. The first Super Admin setup route is pending database mapping; the setup token is already part of the required environment contract. No administrator account has been seeded.
 
-## Deploy on Vercel
+## Development checks
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```sh
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`npm run test:e2e` is configured for Playwright; browser flow tests require a fully implemented app and an isolated test database.
+# Laboratory-Science-Management-System

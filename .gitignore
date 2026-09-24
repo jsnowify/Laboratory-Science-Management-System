@@ -12,9 +12,14 @@
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
+/.next-ui/
 
 # next.js
 /.next/
+/.drizzle-introspection/
+/apps/api/.storage/
 /out/
 
 # production

@@ -1,0 +1,33 @@
+{
+  "name": "@lsms/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsup",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lsms/shared": "0.1.0",
+    "@better-auth/drizzle-adapter": "^1.7.5",
+    "@fastify/cors": "^11.0.0",
+    "@fastify/helmet": "^13.0.0",
+    "@fastify/rate-limit": "^10.0.0",
+    "better-auth": "^1.7.5",
+    "dotenv": "^18.0.3",
+    "drizzle-orm": "^0.45.3",
+    "fastify": "^5.0.0",
+    "pdf-lib": "^1.17.1",
+    "postgres": "^3.4.9",
+    "qrcode": "^1.5.4",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "tsx": "^4.0.0",
+    "@types/qrcode": "^1.5.6",
+    "typescript": "^5.0.0"
+  }
+}

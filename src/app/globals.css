@@ -1,18 +1,86 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  --background: #f8faf9;
+  --foreground: #17211a;
+  --surface: #ffffff;
+  --surface-subtle: #f4f7f5;
+  --primary: #166534;
+  --primary-hover: #14532d;
+  --primary-soft: #f0fdf4;
+  --primary-border: #bbebcc;
+  --secondary: #526057;
+  --muted: #65736a;
+  --border: #e2e8e4;
+  --border-strong: #cbd5ce;
+  --danger: #b42318;
+  --danger-soft: #fef3f2;
+  --warning: #92400e;
+  --warning-soft: #fffbeb;
+  --radius-control: 0.625rem;
+  --radius-panel: 0.75rem;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
   --font-sans: var(--font-geist-sans);
 }
 
+* { box-sizing: border-box; }
+html { min-width: 320px; }
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
+button, input, select, textarea { font-family: inherit; }
+button { min-height: 44px; }
+input, select, textarea { min-width: 0; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+button:not(:disabled), [role="button"]:not([aria-disabled="true"]) { cursor: pointer; }
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid #15803d;
+  outline-offset: 2px;
+}
+::selection { background: #bbebcc; color: #14532d; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}
+.ui-panel { border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); }
+.ui-button-primary { min-height: 44px; border-radius: var(--radius-control); background: var(--primary); color: white; padding: .625rem 1rem; font-size: .875rem; font-weight: 600; }
+.ui-button-primary:hover:not(:disabled) { background: var(--primary-hover); }
+.ui-button-secondary { min-height: 44px; border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: white; color: var(--foreground); padding: .625rem 1rem; font-size: .875rem; font-weight: 600; }
+.ui-button-secondary:hover:not(:disabled) { background: var(--surface-subtle); }
+.ui-button-danger { min-height: 44px; border: 1px solid #f2b8b5; border-radius: var(--radius-control); background: var(--danger-soft); color: var(--danger); padding: .625rem 1rem; font-size: .875rem; font-weight: 600; }
+.ui-button-danger:hover:not(:disabled) { background: #fee4e2; }
+.ui-button-primary:disabled, .ui-button-secondary:disabled, .ui-button-danger:disabled { cursor: not-allowed; opacity: .55; }
+.ui-table-scroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-panel); background: white; scrollbar-color: var(--border-strong) transparent; }
+.ui-table-scroll table { font-size: .875rem; }
+.ui-table-scroll th { color: var(--secondary); font-weight: 600; white-space: nowrap; }
+.ui-table-scroll tbody tr:hover { background: #f8faf9; }
+.ui-table-scroll td :where(button, a) { display: inline-flex; min-height: 44px; align-items: center; padding-inline: .25rem; }
+.ui-table-scroll th:first-child { position: sticky; left: 0; background: #f8faf9; z-index: 1; }
+.ui-table-scroll td:first-child { position: sticky; left: 0; background: white; }
+.ui-table-scroll tbody tr:hover td:first-child { background: #f8faf9; }
+.ui-button-primary, .ui-button-secondary, .ui-button-danger { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; text-align: center; }
+@media (max-width: 767px) {
+  .ui-table-scroll::before { content: "Scroll across to see all columns →"; display: block; position: sticky; left: 0; padding: .625rem 1rem; color: var(--secondary); background: var(--surface-subtle); font-size: .75rem; }
+  .ui-table-scroll th:first-child, .ui-table-scroll td:first-child { position: static; }
+}
+@media print {
+  aside, header, [data-mobile-nav] { display: none !important; }
+  .ui-table-scroll { overflow: visible; border: none; }
+  .ui-table-scroll table { min-width: 0; font-size: 10px; }
+  .ui-table-scroll td:first-child, .ui-table-scroll th:first-child { position: static; }
+  body { background: white; }
+}
+.ui-input { min-height: 44px; width: 100%; border: 1px solid var(--border-strong); border-radius: var(--radius-control); background: white; padding: .625rem .75rem; color: var(--foreground); font-size: .875rem; }
+.ui-input:hover:not(:disabled) { border-color: #9eae9f; }
+.ui-input:disabled { background: var(--surface-subtle); color: var(--muted); }
+.ui-input[aria-invalid="true"] { border-color: #d92d20; }
+textarea.ui-input { min-height: 6rem; resize: vertical; }

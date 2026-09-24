@@ -2,18 +2,26 @@
   "name": "lsms",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "apps/api",
+    "packages/shared"
+  ],
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "dev:api": "npm run dev -w @lsms/api",
+    "build": "npm run build -w @lsms/api && next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && npm run typecheck -w @lsms/api",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "db:pull": "drizzle-kit pull --config=drizzle.pull.config.ts"
+    "db:pull": "drizzle-kit pull --config=drizzle.pull.config.ts",
+    "build:ui": "node scripts/build-ui.mjs",
+    "test:ui": "playwright test --config=playwright.ui.config.ts"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.7.5",
+    "@lsms/shared": "0.1.0",
     "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-label": "^2.1.15",
     "@radix-ui/react-select": "^2.3.7",
@@ -36,6 +44,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^24.13.6",

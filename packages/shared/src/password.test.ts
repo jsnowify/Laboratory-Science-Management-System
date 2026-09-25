@@ -19,7 +19,9 @@ describe("account password policy", () => {
       email: "admin@example.test",
       setupToken: "setup-token",
     };
-    expect(setupInput.safeParse({ ...common, password: "temporary1234" }).success).toBe(true);
+    expect(
+      setupInput.safeParse({ ...common, password: "temporary1234" }).success,
+    ).toBe(true);
     expect(strongPassword.safeParse("temporary1234").success).toBe(false);
   });
 });

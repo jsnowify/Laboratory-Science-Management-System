@@ -24,10 +24,23 @@ describe("role permissions", () => {
     expect(can("student_faculty", "users.manage_all")).toBe(false);
   });
   it("rejects attempts to change role or affiliation through profile updates", () => {
-    const details = { firstName: "Test", middleName: "", lastName: "Borrower", email: "test@example.edu" };
+    const details = {
+      firstName: "Test",
+      middleName: "",
+      lastName: "Borrower",
+      email: "test@example.edu",
+    };
     expect(profileUpdateInput.safeParse(details).success).toBe(true);
-    expect(profileUpdateInput.safeParse({ ...details, personType: "faculty" }).success).toBe(false);
-    expect(profileUpdateInput.safeParse({ ...details, role: "super_admin" }).success).toBe(false);
-    expect(profileUpdateInput.safeParse({ ...details, institutionalId: "OTHER-001" }).success).toBe(false);
+    expect(
+      profileUpdateInput.safeParse({ ...details, personType: "faculty" })
+        .success,
+    ).toBe(false);
+    expect(
+      profileUpdateInput.safeParse({ ...details, role: "super_admin" }).success,
+    ).toBe(false);
+    expect(
+      profileUpdateInput.safeParse({ ...details, institutionalId: "OTHER-001" })
+        .success,
+    ).toBe(false);
   });
 });

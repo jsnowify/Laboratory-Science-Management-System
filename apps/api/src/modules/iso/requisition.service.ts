@@ -44,14 +44,12 @@ export async function createRequisition(requestId: string, actorId: string) {
       .insert(isoRequisitions)
       .values({ borrowRequestId: requestId, generatedBy: actorId })
       .returning();
-    await tx
-      .insert(auditLogs)
-      .values({
-        actorUserId: actorId,
-        action: "iso_requisition.generated",
-        entityType: "iso_requisitions",
-        entityId: row.id,
-      });
+    await tx.insert(auditLogs).values({
+      actorUserId: actorId,
+      action: "iso_requisition.generated",
+      entityType: "iso_requisitions",
+      entityId: row.id,
+    });
     return row;
   });
   let storageStatus = "stored";
@@ -147,14 +145,12 @@ export async function markRequisitionReleased(id: string, actorId: string) {
       .set({ releasedAt: new Date().toISOString() })
       .where(eq(isoRequisitions.id, id))
       .returning();
-    await tx
-      .insert(auditLogs)
-      .values({
-        actorUserId: actorId,
-        action: "iso_requisition.released",
-        entityType: "iso_requisitions",
-        entityId: id,
-      });
+    await tx.insert(auditLogs).values({
+      actorUserId: actorId,
+      action: "iso_requisition.released",
+      entityType: "iso_requisitions",
+      entityId: id,
+    });
     return updated;
   });
 }

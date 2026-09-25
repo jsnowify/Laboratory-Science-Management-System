@@ -13,15 +13,29 @@ export class AppError extends Error {
 export function applicationError(error: unknown): AppError {
   if (error instanceof AppError) return error;
   if (error instanceof APIError) {
-    const code = typeof error.body === "object" && error.body !== null && "code" in error.body
-      ? String(error.body.code)
-      : "";
-    if (code === "USER_ALREADY_EXISTS" || code === "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL")
-      return new AppError(409, "EMAIL_EXISTS", "That email address is already registered.");
+    const code =
+      typeof error.body === "object" &&
+      error.body !== null &&
+      "code" in error.body
+        ? String(error.body.code)
+        : "";
+    if (
+      code === "USER_ALREADY_EXISTS" ||
+      code === "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL"
+    )
+      return new AppError(
+        409,
+        "EMAIL_EXISTS",
+        "That email address is already registered.",
+      );
     if (code === "INVALID_EMAIL")
       return new AppError(422, "INVALID_EMAIL", "Enter a valid email address.");
     if (code === "PASSWORD_TOO_SHORT" || code === "PASSWORD_TOO_LONG")
-      return new AppError(422, "INVALID_PASSWORD", "Choose a password that meets the stated requirements.");
+      return new AppError(
+        422,
+        "INVALID_PASSWORD",
+        "Choose a password that meets the stated requirements.",
+      );
   }
   return databaseError(error);
 }
@@ -29,7 +43,13 @@ export function applicationError(error: unknown): AppError {
 export function databaseError(error: unknown): AppError {
   let failure = error;
   for (let depth = 0; depth < 4; depth++) {
-    if (typeof failure !== "object" || failure === null || !("cause" in failure) || !failure.cause) break;
+    if (
+      typeof failure !== "object" ||
+      failure === null ||
+      !("cause" in failure) ||
+      !failure.cause
+    )
+      break;
     failure = failure.cause;
   }
   const code =
@@ -37,7 +57,9 @@ export function databaseError(error: unknown): AppError {
       ? String(failure.code)
       : "";
   const constraint =
-    typeof failure === "object" && failure !== null && "constraint_name" in failure
+    typeof failure === "object" &&
+    failure !== null &&
+    "constraint_name" in failure
       ? String(failure.constraint_name)
       : "";
   if (code === "23505") {

@@ -61,7 +61,11 @@ export function CatalogManager() {
       query: { limit: 100 },
     })
       .then((page) => setCategories(page.data))
-      .catch(() => setLookupError("Equipment categories could not be loaded. Try again before adding a record."));
+      .catch(() =>
+        setLookupError(
+          "Equipment categories could not be loaded. Try again before adding a record.",
+        ),
+      );
   }, [retryVersion]);
   useEffect(() => {
     const controller = new AbortController();
@@ -124,7 +128,17 @@ export function CatalogManager() {
   async function toggle(row: Catalog) {
     if (busy) return;
     const verb = row.isActive ? "Archive" : "Reactivate";
-    if (!await confirm({ title: `${verb} ${row.equipmentName}?`, description: row.isActive ? "It will no longer be available for new borrowing. Existing transaction history remains." : "It will be available in the equipment catalog again.", confirmLabel: `${verb} equipment`, tone: row.isActive ? "danger" : "primary" })) return;
+    if (
+      !(await confirm({
+        title: `${verb} ${row.equipmentName}?`,
+        description: row.isActive
+          ? "It will no longer be available for new borrowing. Existing transaction history remains."
+          : "It will be available in the equipment catalog again.",
+        confirmLabel: `${verb} equipment`,
+        tone: row.isActive ? "danger" : "primary",
+      }))
+    )
+      return;
     setBusy(true);
     try {
       await apiRequest(`/api/v1/equipment/catalog/${row.id}/`, {
@@ -139,13 +153,22 @@ export function CatalogManager() {
           ? cause.message
           : "Catalog item could not be updated.",
       );
+    } finally {
+      setBusy(false);
     }
-    finally { setBusy(false); }
   }
 
   return (
     <div className="space-y-5">
-      {lookupError && <ErrorNotice message={lookupError} onRetry={() => { setLookupError(""); setRetryVersion((value) => value + 1); }} />}
+      {lookupError && (
+        <ErrorNotice
+          message={lookupError}
+          onRetry={() => {
+            setLookupError("");
+            setRetryVersion((value) => value + 1);
+          }}
+        />
+      )}
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -161,102 +184,151 @@ export function CatalogManager() {
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search equipment"
         />
-        <button className="ui-button-secondary">
-          Search
-        </button>
+        <button className="ui-button-secondary">Search</button>
       </form>
-      <details ref={editor} className="ui-panel"><summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-green-800">{editing ? "Edit equipment type" : "Add equipment type"}</summary><form
-        onSubmit={save}
-        className="border-t border-slate-200 p-4 sm:p-5"
-      >
-        <h2 className="mb-4 font-semibold">
-          {editing ? "Edit catalog item" : "Add catalog item"}
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormField
-            id="categoryId"
-            label="Category"
-            error={fields.categoryId?.[0]}
-          >
-            <CustomSelect id="categoryId" label="Category" required invalid={Boolean(fields.categoryId)} value={values.categoryId} placeholder="Choose category" emptyMessage="No categories yet. Add a category before creating an equipment type." options={categories.map((item) => ({ value: item.id, label: item.name }))} onValueChange={(value) => setValues({ ...values, categoryId: value })} />
-          </FormField>
-          {(
-            [
-              "equipmentName",
-              "manufacturer",
-              "model",
-              "unitOfMeasure",
-              "description",
-            ] as const
-          ).map((key) => {
-            const labels = {
-              equipmentName: "Equipment name",
-              manufacturer: "Manufacturer",
-              model: "Model",
-              unitOfMeasure: "Unit of measure",
-              description: "Description",
-            };
-            return (
-              <FormField
-                key={key}
-                id={key}
-                label={labels[key]}
-                error={fields[key]?.[0]}
-              >
-                <input
-                  id={key}
-                  className={inputClass}
-                  required={key === "equipmentName" || key === "unitOfMeasure"}
-                  value={values[key]}
-                  onChange={(event) =>
-                    setValues({ ...values, [key]: event.target.value })
-                  }
-                />
-              </FormField>
-            );
-          })}
-        </div>
-        <div className="mt-4 flex gap-2">
-          <button disabled={busy} className={`${primaryClass} w-auto`}>
-            {busy ? "Saving…" : editing ? "Save changes" : "Add item"}
-          </button>
-          {editing && (
-            <button
-              type="button"
-              className="ui-button-secondary"
-              onClick={() => {
-                setEditing(null);
-                setValues(empty);
-              }}
+      <details ref={editor} className="ui-panel">
+        <summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-green-800">
+          {editing ? "Edit equipment type" : "Add equipment type"}
+        </summary>
+        <form onSubmit={save} className="border-t border-slate-200 p-4 sm:p-5">
+          <h2 className="mb-4 font-semibold">
+            {editing ? "Edit catalog item" : "Add catalog item"}
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField
+              id="categoryId"
+              label="Category"
+              error={fields.categoryId?.[0]}
             >
-              Cancel
+              <CustomSelect
+                id="categoryId"
+                label="Category"
+                required
+                invalid={Boolean(fields.categoryId)}
+                value={values.categoryId}
+                placeholder="Choose category"
+                emptyMessage="No categories yet. Add a category before creating an equipment type."
+                options={categories.map((item) => ({
+                  value: item.id,
+                  label: item.name,
+                }))}
+                onValueChange={(value) =>
+                  setValues({ ...values, categoryId: value })
+                }
+              />
+            </FormField>
+            {(
+              [
+                "equipmentName",
+                "manufacturer",
+                "model",
+                "unitOfMeasure",
+                "description",
+              ] as const
+            ).map((key) => {
+              const labels = {
+                equipmentName: "Equipment name",
+                manufacturer: "Manufacturer",
+                model: "Model",
+                unitOfMeasure: "Unit of measure",
+                description: "Description",
+              };
+              return (
+                <FormField
+                  key={key}
+                  id={key}
+                  label={labels[key]}
+                  error={fields[key]?.[0]}
+                >
+                  <input
+                    id={key}
+                    className={inputClass}
+                    required={
+                      key === "equipmentName" || key === "unitOfMeasure"
+                    }
+                    value={values[key]}
+                    onChange={(event) =>
+                      setValues({ ...values, [key]: event.target.value })
+                    }
+                  />
+                </FormField>
+              );
+            })}
+          </div>
+          <div className="mt-4 flex gap-2">
+            <button disabled={busy} className={`${primaryClass} w-auto`}>
+              {busy ? "Saving…" : editing ? "Save changes" : "Add item"}
             </button>
-          )}
-        </div>
-      </form></details>
+            {editing && (
+              <button
+                type="button"
+                className="ui-button-secondary"
+                onClick={() => {
+                  setEditing(null);
+                  setValues(empty);
+                }}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        </form>
+      </details>
       {error && (
-        <ErrorNotice message={error} onRetry={() => { setLoading(true); setRetryVersion((value) => value + 1); }} />
+        <ErrorNotice
+          message={error}
+          onRetry={() => {
+            setLoading(true);
+            setRetryVersion((value) => value + 1);
+          }}
+        />
       )}
-      <div className="ui-table-scroll" role="region" aria-label="Records table; scroll horizontally for more columns" tabIndex={0} aria-busy={loading}>
+      <div
+        className="ui-table-scroll"
+        role="region"
+        aria-label="Records table; scroll horizontally for more columns"
+        tabIndex={0}
+        aria-busy={loading}
+      >
         <table className="w-full min-w-[700px] text-left text-sm">
           <thead className="bg-slate-50 text-slate-600">
             <tr>
-              <th scope="col" className="px-4 py-3">Equipment</th>
-              <th scope="col" className="px-4 py-3">Category</th>
-              <th scope="col" className="px-4 py-3">Assets</th>
-              <th scope="col" className="px-4 py-3">Available now</th>
-              <th scope="col" className="px-4 py-3">Status</th>
-              <th scope="col" className="px-4 py-3">Actions</th>
+              <th scope="col" className="px-4 py-3">
+                Equipment
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Category
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Assets
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Available now
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Status
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="p-8 text-center"><LoadingBars /></td>
+                <td colSpan={6} className="p-8 text-center">
+                  <LoadingBars />
+                </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-8 text-center text-slate-500">{error ? "Records could not be loaded. Try again above." : search ? "No equipment types match this search. Try a different name." : "No equipment types yet. Add a category first, then create an equipment type."}</td>
+                <td colSpan={6} className="p-8 text-center text-slate-500">
+                  {error
+                    ? "Records could not be loaded. Try again above."
+                    : search
+                      ? "No equipment types match this search. Try a different name."
+                      : "No equipment types yet. Add a category first, then create an equipment type."}
+                </td>
               </tr>
             ) : (
               rows.map((row) => (
@@ -268,12 +340,26 @@ export function CatalogManager() {
                   </td>
                   <td className="px-4 py-3">{row.totalUnits}</td>
                   <td className="px-4 py-3">{row.availableUnits}</td>
-                  <td className="px-4 py-3"><StatusBadge status={row.isActive ? "active" : "archived"} /></td>
+                  <td className="px-4 py-3">
+                    <StatusBadge
+                      status={row.isActive ? "active" : "archived"}
+                    />
+                  </td>
                   <td className="space-x-3 px-4 py-3">
-                    <button disabled={busy}
+                    <button
+                      disabled={busy}
                       className="font-medium text-green-800"
                       onClick={() => {
-                        if (editor.current) { editor.current.open = true; editor.current.scrollIntoView({ block: "start" }); requestAnimationFrame(() => editor.current?.querySelector<HTMLInputElement>("input, select")?.focus()); } setEditing(row.id);
+                        if (editor.current) {
+                          editor.current.open = true;
+                          editor.current.scrollIntoView({ block: "start" });
+                          requestAnimationFrame(() =>
+                            editor.current
+                              ?.querySelector<HTMLInputElement>("input, select")
+                              ?.focus(),
+                          );
+                        }
+                        setEditing(row.id);
                         setValues({
                           categoryId: row.categoryId,
                           equipmentName: row.equipmentName,
@@ -286,7 +372,8 @@ export function CatalogManager() {
                     >
                       Edit
                     </button>
-                    <button disabled={busy}
+                    <button
+                      disabled={busy}
                       className="text-slate-600"
                       onClick={() => toggle(row)}
                     >
@@ -299,7 +386,16 @@ export function CatalogManager() {
           </tbody>
         </table>
       </div>
-      <Pagination page={page} total={total} label="items" loading={loading} onPageChange={(next) => { setLoading(true); setPage(next); }} />
+      <Pagination
+        page={page}
+        total={total}
+        label="items"
+        loading={loading}
+        onPageChange={(next) => {
+          setLoading(true);
+          setPage(next);
+        }}
+      />
     </div>
   );
 }

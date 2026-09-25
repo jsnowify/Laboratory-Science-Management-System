@@ -4,5 +4,9 @@ import { requirePageRole } from "@/lib/api/server";
 
 export default async function CatalogPage() {
   const profile = await requirePageRole("admin");
-  return <DashboardShell profile={profile} title="Equipment catalog"><CatalogManager /></DashboardShell>;
+  return (
+    <DashboardShell profile={profile} title="Equipment catalog">
+      <CatalogManager />
+    </DashboardShell>
+  );
 }

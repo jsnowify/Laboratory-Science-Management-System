@@ -12,8 +12,21 @@ export function canAdminChangeStatus(role: string, from: Status, to: Status) {
   return role === "student_faculty" && from === "pending" && to === "active";
 }
 
-export function canSuperAdminChangeStatus(targetRole: string, from: Status, to: Status, isSelf: boolean, hasOtherActiveSuperAdmin: boolean) {
-  return canSetStatus(from, to)
-    && !(isSelf && to !== "active")
-    && !(targetRole === "super_admin" && from === "active" && to !== "active" && !hasOtherActiveSuperAdmin);
+export function canSuperAdminChangeStatus(
+  targetRole: string,
+  from: Status,
+  to: Status,
+  isSelf: boolean,
+  hasOtherActiveSuperAdmin: boolean,
+) {
+  return (
+    canSetStatus(from, to) &&
+    !(isSelf && to !== "active") &&
+    !(
+      targetRole === "super_admin" &&
+      from === "active" &&
+      to !== "active" &&
+      !hasOtherActiveSuperAdmin
+    )
+  );
 }

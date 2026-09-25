@@ -100,7 +100,17 @@ export function CategoriesManager() {
   async function toggle(row: Category) {
     if (busy) return;
     const verb = row.isActive ? "Deactivate" : "Reactivate";
-    if (!await confirm({ title: `${verb} ${row.name}?`, description: row.isActive ? "This category will no longer be offered for new equipment. Existing records remain." : "This category will be available for equipment again.", confirmLabel: `${verb} category`, tone: row.isActive ? "danger" : "primary" })) return;
+    if (
+      !(await confirm({
+        title: `${verb} ${row.name}?`,
+        description: row.isActive
+          ? "This category will no longer be offered for new equipment. Existing records remain."
+          : "This category will be available for equipment again.",
+        confirmLabel: `${verb} category`,
+        tone: row.isActive ? "danger" : "primary",
+      }))
+    )
+      return;
     setBusy(true);
     try {
       await apiRequest(`/api/v1/equipment/categories/${row.id}/`, {
@@ -115,8 +125,9 @@ export function CategoriesManager() {
           ? cause.message
           : "Category could not be updated.",
       );
+    } finally {
+      setBusy(false);
     }
-    finally { setBusy(false); }
   }
 
   return (
@@ -136,95 +147,138 @@ export function CategoriesManager() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
-        <button className="ui-button-secondary">
-          Search
-        </button>
+        <button className="ui-button-secondary">Search</button>
       </form>
-      <details ref={editor} className="ui-panel"><summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-green-800">{editing ? "Edit category" : "Add category"}</summary><form
-        onSubmit={save}
-        className="border-t border-slate-200 p-4 sm:p-5"
-      >
-        <h2 className="mb-4 font-semibold">
+      <details ref={editor} className="ui-panel">
+        <summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-green-800">
           {editing ? "Edit category" : "Add category"}
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormField id="category-name" label="Name">
-            <input
-              id="category-name"
-              className={inputClass}
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              required
-            />
-          </FormField>
-          <FormField id="category-description" label="Description">
-            <input
-              id="category-description"
-              className={inputClass}
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-            />
-          </FormField>
-        </div>
-        <div className="mt-4 flex gap-2">
-          <button className={`${primaryClass} w-auto`} disabled={busy}>
-            {busy ? "Saving…" : editing ? "Save changes" : "Add category"}
-          </button>
-          {editing && (
-            <button
-              type="button"
-              className="ui-button-secondary"
-              onClick={() => {
-                setEditing(null);
-                setName("");
-                setDescription("");
-              }}
-            >
-              Cancel
+        </summary>
+        <form onSubmit={save} className="border-t border-slate-200 p-4 sm:p-5">
+          <h2 className="mb-4 font-semibold">
+            {editing ? "Edit category" : "Add category"}
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField id="category-name" label="Name">
+              <input
+                id="category-name"
+                className={inputClass}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                required
+              />
+            </FormField>
+            <FormField id="category-description" label="Description">
+              <input
+                id="category-description"
+                className={inputClass}
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+              />
+            </FormField>
+          </div>
+          <div className="mt-4 flex gap-2">
+            <button className={`${primaryClass} w-auto`} disabled={busy}>
+              {busy ? "Saving…" : editing ? "Save changes" : "Add category"}
             </button>
-          )}
-        </div>
-      </form></details>
+            {editing && (
+              <button
+                type="button"
+                className="ui-button-secondary"
+                onClick={() => {
+                  setEditing(null);
+                  setName("");
+                  setDescription("");
+                }}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        </form>
+      </details>
       {error && (
-        <ErrorNotice message={error} onRetry={() => { setLoading(true); setRetryVersion((value) => value + 1); }} />
+        <ErrorNotice
+          message={error}
+          onRetry={() => {
+            setLoading(true);
+            setRetryVersion((value) => value + 1);
+          }}
+        />
       )}
-      <div className="ui-table-scroll" role="region" aria-label="Records table; scroll horizontally for more columns" tabIndex={0} aria-busy={loading}>
+      <div
+        className="ui-table-scroll"
+        role="region"
+        aria-label="Records table; scroll horizontally for more columns"
+        tabIndex={0}
+        aria-busy={loading}
+      >
         <table className="w-full min-w-[560px] text-left text-sm">
           <thead className="bg-slate-50 text-slate-600">
             <tr>
-              <th scope="col" className="px-4 py-3">Name</th>
-              <th scope="col" className="px-4 py-3">Description</th>
-              <th scope="col" className="px-4 py-3">Status</th>
-              <th scope="col" className="px-4 py-3">Actions</th>
+              <th scope="col" className="px-4 py-3">
+                Name
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Description
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Status
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={4} className="p-8 text-center"><LoadingBars /></td>
+                <td colSpan={4} className="p-8 text-center">
+                  <LoadingBars />
+                </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={4} className="p-8 text-center text-[#526b59]">{error ? "Categories could not be loaded. Try again above." : search ? "No categories match this search. Try another name." : "No categories yet. Open Add category above to create the first one."}</td>
+                <td colSpan={4} className="p-8 text-center text-[#526b59]">
+                  {error
+                    ? "Categories could not be loaded. Try again above."
+                    : search
+                      ? "No categories match this search. Try another name."
+                      : "No categories yet. Open Add category above to create the first one."}
+                </td>
               </tr>
             ) : (
               rows.map((row) => (
                 <tr key={row.id} className="border-t border-slate-100">
                   <td className="px-4 py-3 font-medium">{row.name}</td>
                   <td className="px-4 py-3">{row.description ?? "—"}</td>
-                  <td className="px-4 py-3"><StatusBadge status={row.isActive ? "active" : "inactive"} /></td>
+                  <td className="px-4 py-3">
+                    <StatusBadge
+                      status={row.isActive ? "active" : "inactive"}
+                    />
+                  </td>
                   <td className="space-x-3 px-4 py-3">
-                    <button disabled={busy}
+                    <button
+                      disabled={busy}
                       className="font-medium text-green-800"
                       onClick={() => {
-                        if (editor.current) { editor.current.open = true; editor.current.scrollIntoView({ block: "start" }); requestAnimationFrame(() => editor.current?.querySelector<HTMLInputElement>("input, select")?.focus()); } setEditing(row.id);
+                        if (editor.current) {
+                          editor.current.open = true;
+                          editor.current.scrollIntoView({ block: "start" });
+                          requestAnimationFrame(() =>
+                            editor.current
+                              ?.querySelector<HTMLInputElement>("input, select")
+                              ?.focus(),
+                          );
+                        }
+                        setEditing(row.id);
                         setName(row.name);
                         setDescription(row.description ?? "");
                       }}
                     >
                       Edit
                     </button>
-                    <button disabled={busy}
+                    <button
+                      disabled={busy}
                       className="text-slate-600"
                       onClick={() => toggle(row)}
                     >
@@ -237,7 +291,16 @@ export function CategoriesManager() {
           </tbody>
         </table>
       </div>
-      <Pagination page={page} total={total} label="categories" loading={loading} onPageChange={(next) => { setLoading(true); setPage(next); }} />
+      <Pagination
+        page={page}
+        total={total}
+        label="categories"
+        loading={loading}
+        onPageChange={(next) => {
+          setLoading(true);
+          setPage(next);
+        }}
+      />
     </div>
   );
 }

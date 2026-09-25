@@ -4,5 +4,9 @@ import { requirePageRole } from "@/lib/api/server";
 
 export default async function CoursesPage() {
   const profile = await requirePageRole("super_admin");
-  return <DashboardShell profile={profile} title="Courses"><OrganizationManager resource="courses" /></DashboardShell>;
+  return (
+    <DashboardShell profile={profile} title="Courses">
+      <OrganizationManager resource="courses" />
+    </DashboardShell>
+  );
 }

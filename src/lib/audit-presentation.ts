@@ -40,37 +40,76 @@ const actionLabels: Record<string, string> = {
 };
 
 const recordLabels: Record<string, string> = {
-  users: "Account", colleges: "College", courses: "Course", departments: "Department",
-  equipment_categories: "Equipment category", equipment_catalog: "Equipment type",
-  equipment_assets: "Physical asset", borrow_requests: "Borrowing request",
-  borrow_allocations: "Equipment allocation", return_records: "Return", iso_requisitions: "Requisition form",
+  users: "Account",
+  colleges: "College",
+  courses: "Course",
+  departments: "Department",
+  equipment_categories: "Equipment category",
+  equipment_catalog: "Equipment type",
+  equipment_assets: "Physical asset",
+  borrow_requests: "Borrowing request",
+  borrow_allocations: "Equipment allocation",
+  return_records: "Return",
+  iso_requisitions: "Requisition form",
 };
 
 export function auditActionLabel(action: string) {
-  return actionLabels[action] ?? action.replaceAll(/[._]/g, " ").replace(/^./, (letter) => letter.toUpperCase());
+  return (
+    actionLabels[action] ??
+    action
+      .replaceAll(/[._]/g, " ")
+      .replace(/^./, (letter) => letter.toUpperCase())
+  );
 }
 
 export function auditRoleLabel(role: string | null) {
-  return ({ admin: "Admin", super_admin: "Super Admin", student_faculty: "Student / Faculty" } as Record<string, string>)[role ?? ""] ?? "System";
+  return (
+    (
+      {
+        admin: "Admin",
+        super_admin: "Super Admin",
+        student_faculty: "Student / Faculty",
+      } as Record<string, string>
+    )[role ?? ""] ?? "System"
+  );
 }
 
 export function auditRecordLabel(type: string, targetLabel?: string | null) {
   const label = recordLabels[type] ?? "Record";
-  return targetLabel ? `${label}: ${targetLabel}` : `${label} (no longer available)`;
+  return targetLabel
+    ? `${label}: ${targetLabel}`
+    : `${label} (no longer available)`;
 }
 
-const fieldLabels: Record<string, string> = { firstName: "first name", middleName: "middle name", lastName: "last name", email: "email address" };
+const fieldLabels: Record<string, string> = {
+  firstName: "first name",
+  middleName: "middle name",
+  lastName: "last name",
+  email: "email address",
+};
 
 export function auditDetails(metadata: unknown): string {
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return "";
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata))
+    return "";
   const values = metadata as Record<string, unknown>;
   const parts: string[] = [];
-  if (typeof values.previousStatus === "string" && typeof values.newStatus === "string") parts.push(`Status changed from ${values.previousStatus.replaceAll("_", " ")} to ${values.newStatus.replaceAll("_", " ")}.`);
+  if (
+    typeof values.previousStatus === "string" &&
+    typeof values.newStatus === "string"
+  )
+    parts.push(
+      `Status changed from ${values.previousStatus.replaceAll("_", " ")} to ${values.newStatus.replaceAll("_", " ")}.`,
+    );
   if (Array.isArray(values.changedFields)) {
-    const fields = values.changedFields.filter((field): field is string => typeof field === "string").map((field) => fieldLabels[field]).filter(Boolean);
+    const fields = values.changedFields
+      .filter((field): field is string => typeof field === "string")
+      .map((field) => fieldLabels[field])
+      .filter(Boolean);
     if (fields.length) parts.push(`Updated ${fields.join(", ")}.`);
   }
-  if (typeof values.personType === "string") parts.push(`Affiliation: ${values.personType}.`);
-  if (typeof values.outcome === "string") parts.push(`Return outcome: ${values.outcome.replaceAll("_", " ")}.`);
+  if (typeof values.personType === "string")
+    parts.push(`Affiliation: ${values.personType}.`);
+  if (typeof values.outcome === "string")
+    parts.push(`Return outcome: ${values.outcome.replaceAll("_", " ")}.`);
   return parts.join(" ");
 }

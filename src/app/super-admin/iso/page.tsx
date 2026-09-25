@@ -4,5 +4,9 @@ import { requirePageRole } from "@/lib/api/server";
 
 export default async function IsoPage() {
   const profile = await requirePageRole("super_admin");
-  return <DashboardShell profile={profile} title="ISO requisitions"><RequisitionList /></DashboardShell>;
+  return (
+    <DashboardShell profile={profile} title="ISO requisitions">
+      <RequisitionList />
+    </DashboardShell>
+  );
 }

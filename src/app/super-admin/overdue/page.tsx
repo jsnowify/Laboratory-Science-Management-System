@@ -4,5 +4,9 @@ import { requirePageRole } from "@/lib/api/server";
 
 export default async function OverduePage() {
   const profile = await requirePageRole("super_admin");
-  return <DashboardShell profile={profile} title="Overdue equipment"><OverdueTable /></DashboardShell>;
+  return (
+    <DashboardShell profile={profile} title="Overdue equipment">
+      <OverdueTable />
+    </DashboardShell>
+  );
 }

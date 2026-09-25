@@ -4,5 +4,9 @@ import { requirePageRole } from "@/lib/api/server";
 
 export default async function PortalCustodyPage() {
   const profile = await requirePageRole("student_faculty");
-  return <DashboardShell profile={profile} title="Equipment in your custody"><CustodyTable canReturn={false} /></DashboardShell>;
+  return (
+    <DashboardShell profile={profile} title="Equipment in your custody">
+      <CustodyTable canReturn={false} />
+    </DashboardShell>
+  );
 }

@@ -66,12 +66,20 @@ export function AssetsManager() {
       query: { limit: 100 },
     })
       .then((page) => setCatalog(page.data))
-      .catch(() => setLookupError("Equipment options could not be loaded. Try again before adding a record."));
+      .catch(() =>
+        setLookupError(
+          "Equipment options could not be loaded. Try again before adding a record.",
+        ),
+      );
     apiRequest<{ data: Option[] }>("/api/v1/departments/", {
       query: { limit: 100 },
     })
       .then((page) => setDepartments(page.data))
-      .catch(() => setLookupError("Equipment options could not be loaded. Try again before adding a record."));
+      .catch(() =>
+        setLookupError(
+          "Equipment options could not be loaded. Try again before adding a record.",
+        ),
+      );
   }, [retryVersion]);
   useEffect(() => {
     const controller = new AbortController();
@@ -134,7 +142,16 @@ export function AssetsManager() {
 
   async function archive(row: Asset) {
     if (busy) return;
-    if (!await confirm({ title: `Archive asset ${row.assetCode}?`, description: "This physical asset will not be available for future borrowing. Its borrowing history will remain.", confirmLabel: "Archive asset", tone: "danger" })) return;
+    if (
+      !(await confirm({
+        title: `Archive asset ${row.assetCode}?`,
+        description:
+          "This physical asset will not be available for future borrowing. Its borrowing history will remain.",
+        confirmLabel: "Archive asset",
+        tone: "danger",
+      }))
+    )
+      return;
     setBusy(true);
     try {
       await apiRequest(`/api/v1/equipment/assets/${row.id}/`, {
@@ -147,13 +164,22 @@ export function AssetsManager() {
       setError(
         cause instanceof Error ? cause.message : "Asset could not be archived.",
       );
+    } finally {
+      setBusy(false);
     }
-    finally { setBusy(false); }
   }
 
   return (
     <div className="space-y-5">
-      {lookupError && <ErrorNotice message={lookupError} onRetry={() => { setLookupError(""); setRetryVersion((value) => value + 1); }} />}
+      {lookupError && (
+        <ErrorNotice
+          message={lookupError}
+          onRetry={() => {
+            setLookupError("");
+            setRetryVersion((value) => value + 1);
+          }}
+        />
+      )}
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -169,144 +195,241 @@ export function AssetsManager() {
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search asset or serial code"
         />
-        <button className="ui-button-secondary">
-          Search
-        </button>
+        <button className="ui-button-secondary">Search</button>
       </form>
-      <details ref={editor} className="ui-panel"><summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-green-800">{editing ? "Edit physical asset" : "Add physical asset"}</summary><form
-        onSubmit={save}
-        className="border-t border-slate-200 p-4 sm:p-5"
-      >
-        <h2 className="mb-4 font-semibold">
+      <details ref={editor} className="ui-panel">
+        <summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-green-800">
           {editing ? "Edit physical asset" : "Add physical asset"}
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <FormField
-            id="equipmentCatalogId"
-            label="Equipment type"
-            error={fields.equipmentCatalogId?.[0]}
-          >
-            <CustomSelect id="equipmentCatalogId" label="Equipment type" required invalid={Boolean(fields.equipmentCatalogId)} value={values.equipmentCatalogId} placeholder="Choose equipment" emptyMessage="No equipment types yet. Add an equipment category and type before recording an asset." options={catalog.map((item) => ({ value: item.id, label: item.equipmentName ?? "Equipment" }))} onValueChange={(value) => setValues({ ...values, equipmentCatalogId: value })} />
-          </FormField>
-          <FormField
-            id="assetCode"
-            label="Asset code"
-            error={fields.assetCode?.[0]}
-          >
-            <input
-              id="assetCode"
-              required
-              className={inputClass}
-              value={values.assetCode}
-              onChange={(event) =>
-                setValues({ ...values, assetCode: event.target.value })
-              }
-            />
-          </FormField>
-          <FormField
-            id="serialNumber"
-            label="Serial number (optional)"
-            error={fields.serialNumber?.[0]}
-          >
-            <input
-              id="serialNumber"
-              className={inputClass}
-              value={values.serialNumber}
-              onChange={(event) =>
-                setValues({ ...values, serialNumber: event.target.value })
-              }
-            />
-          </FormField>
-          <FormField
-            id="departmentId"
-            label="Department (optional)"
-            error={fields.departmentId?.[0]}
-          >
-            <CustomSelect id="departmentId" label="Department (optional)" value={values.departmentId} placeholder="No department" emptyMessage="No departments have been added yet. You can leave this asset unassigned." options={[{ value: "", label: "No department" }, ...departments.map((item) => ({ value: item.id, label: item.name ?? "Department" }))]} onValueChange={(value) => setValues({ ...values, departmentId: value })} />
-          </FormField>
-          <FormField
-            id="currentCondition"
-            label="Condition"
-            error={fields.currentCondition?.[0]}
-          >
-            <CustomSelect id="currentCondition" label="Condition" value={values.currentCondition} placeholder="Choose condition" options={["excellent", "good", "fair", "damaged"].map((item) => ({ value: item, label: item[0].toUpperCase() + item.slice(1) }))} onValueChange={(value) => setValues({ ...values, currentCondition: value as Asset["currentCondition"] })} />
-          </FormField>
-          <FormField
-            id="operationalStatus"
-            label="Operational status"
-            error={fields.operationalStatus?.[0]}
-          >
-            <CustomSelect id="operationalStatus" label="Operational status" value={values.operationalStatus} placeholder="Choose status" options={["active", "maintenance", "damaged", "retired"].map((item) => ({ value: item, label: item[0].toUpperCase() + item.slice(1) }))} onValueChange={(value) => setValues({ ...values, operationalStatus: value as Asset["operationalStatus"] })} />
-          </FormField>
-          <FormField
-            id="acquisitionDate"
-            label="Acquisition date"
-            error={fields.acquisitionDate?.[0]}
-          >
-            <input
-              id="acquisitionDate"
-              type="date"
-              className={inputClass}
-              value={values.acquisitionDate}
-              onChange={(event) =>
-                setValues({ ...values, acquisitionDate: event.target.value })
-              }
-            />
-          </FormField>
-          <div className="sm:col-span-2">
-            <FormField id="notes" label="Notes" error={fields.notes?.[0]}>
-              <input
-                id="notes"
-                className={inputClass}
-                value={values.notes}
-                onChange={(event) =>
-                  setValues({ ...values, notes: event.target.value })
+        </summary>
+        <form onSubmit={save} className="border-t border-slate-200 p-4 sm:p-5">
+          <h2 className="mb-4 font-semibold">
+            {editing ? "Edit physical asset" : "Add physical asset"}
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <FormField
+              id="equipmentCatalogId"
+              label="Equipment type"
+              error={fields.equipmentCatalogId?.[0]}
+            >
+              <CustomSelect
+                id="equipmentCatalogId"
+                label="Equipment type"
+                required
+                invalid={Boolean(fields.equipmentCatalogId)}
+                value={values.equipmentCatalogId}
+                placeholder="Choose equipment"
+                emptyMessage="No equipment types yet. Add an equipment category and type before recording an asset."
+                options={catalog.map((item) => ({
+                  value: item.id,
+                  label: item.equipmentName ?? "Equipment",
+                }))}
+                onValueChange={(value) =>
+                  setValues({ ...values, equipmentCatalogId: value })
                 }
               />
             </FormField>
-          </div>
-        </div>
-        <div className="mt-4 flex gap-2">
-          <button disabled={busy} className={`${primaryClass} w-auto`}>
-            {busy ? "Saving…" : editing ? "Save changes" : "Add asset"}
-          </button>
-          {editing && (
-            <button
-              type="button"
-              className="ui-button-secondary"
-              onClick={() => {
-                setEditing(null);
-                setValues(empty);
-              }}
+            <FormField
+              id="assetCode"
+              label="Asset code"
+              error={fields.assetCode?.[0]}
             >
-              Cancel
+              <input
+                id="assetCode"
+                required
+                className={inputClass}
+                value={values.assetCode}
+                onChange={(event) =>
+                  setValues({ ...values, assetCode: event.target.value })
+                }
+              />
+            </FormField>
+            <FormField
+              id="serialNumber"
+              label="Serial number (optional)"
+              error={fields.serialNumber?.[0]}
+            >
+              <input
+                id="serialNumber"
+                className={inputClass}
+                value={values.serialNumber}
+                onChange={(event) =>
+                  setValues({ ...values, serialNumber: event.target.value })
+                }
+              />
+            </FormField>
+            <FormField
+              id="departmentId"
+              label="Department (optional)"
+              error={fields.departmentId?.[0]}
+            >
+              <CustomSelect
+                id="departmentId"
+                label="Department (optional)"
+                value={values.departmentId}
+                placeholder="No department"
+                emptyMessage="No departments have been added yet. You can leave this asset unassigned."
+                options={[
+                  { value: "", label: "No department" },
+                  ...departments.map((item) => ({
+                    value: item.id,
+                    label: item.name ?? "Department",
+                  })),
+                ]}
+                onValueChange={(value) =>
+                  setValues({ ...values, departmentId: value })
+                }
+              />
+            </FormField>
+            <FormField
+              id="currentCondition"
+              label="Condition"
+              error={fields.currentCondition?.[0]}
+            >
+              <CustomSelect
+                id="currentCondition"
+                label="Condition"
+                value={values.currentCondition}
+                placeholder="Choose condition"
+                options={["excellent", "good", "fair", "damaged"].map(
+                  (item) => ({
+                    value: item,
+                    label: item[0].toUpperCase() + item.slice(1),
+                  }),
+                )}
+                onValueChange={(value) =>
+                  setValues({
+                    ...values,
+                    currentCondition: value as Asset["currentCondition"],
+                  })
+                }
+              />
+            </FormField>
+            <FormField
+              id="operationalStatus"
+              label="Operational status"
+              error={fields.operationalStatus?.[0]}
+            >
+              <CustomSelect
+                id="operationalStatus"
+                label="Operational status"
+                value={values.operationalStatus}
+                placeholder="Choose status"
+                options={["active", "maintenance", "damaged", "retired"].map(
+                  (item) => ({
+                    value: item,
+                    label: item[0].toUpperCase() + item.slice(1),
+                  }),
+                )}
+                onValueChange={(value) =>
+                  setValues({
+                    ...values,
+                    operationalStatus: value as Asset["operationalStatus"],
+                  })
+                }
+              />
+            </FormField>
+            <FormField
+              id="acquisitionDate"
+              label="Acquisition date"
+              error={fields.acquisitionDate?.[0]}
+            >
+              <input
+                id="acquisitionDate"
+                type="date"
+                className={inputClass}
+                value={values.acquisitionDate}
+                onChange={(event) =>
+                  setValues({ ...values, acquisitionDate: event.target.value })
+                }
+              />
+            </FormField>
+            <div className="sm:col-span-2">
+              <FormField id="notes" label="Notes" error={fields.notes?.[0]}>
+                <input
+                  id="notes"
+                  className={inputClass}
+                  value={values.notes}
+                  onChange={(event) =>
+                    setValues({ ...values, notes: event.target.value })
+                  }
+                />
+              </FormField>
+            </div>
+          </div>
+          <div className="mt-4 flex gap-2">
+            <button disabled={busy} className={`${primaryClass} w-auto`}>
+              {busy ? "Saving…" : editing ? "Save changes" : "Add asset"}
             </button>
-          )}
-        </div>
-      </form></details>
+            {editing && (
+              <button
+                type="button"
+                className="ui-button-secondary"
+                onClick={() => {
+                  setEditing(null);
+                  setValues(empty);
+                }}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        </form>
+      </details>
       {error && (
-        <ErrorNotice message={error} onRetry={() => { setLoading(true); setRetryVersion((value) => value + 1); }} />
+        <ErrorNotice
+          message={error}
+          onRetry={() => {
+            setLoading(true);
+            setRetryVersion((value) => value + 1);
+          }}
+        />
       )}
-      <div className="ui-table-scroll" role="region" aria-label="Records table; scroll horizontally for more columns" tabIndex={0} aria-busy={loading}>
+      <div
+        className="ui-table-scroll"
+        role="region"
+        aria-label="Records table; scroll horizontally for more columns"
+        tabIndex={0}
+        aria-busy={loading}
+      >
         <table className="w-full min-w-[850px] text-left text-sm">
           <thead className="bg-slate-50 text-slate-600">
             <tr>
-              <th scope="col" className="px-4 py-3">Asset code</th>
-              <th scope="col" className="px-4 py-3">Equipment</th>
-              <th scope="col" className="px-4 py-3">Condition</th>
-              <th scope="col" className="px-4 py-3">Operational</th>
-              <th scope="col" className="px-4 py-3">Availability</th>
-              <th scope="col" className="px-4 py-3">Actions</th>
+              <th scope="col" className="px-4 py-3">
+                Asset code
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Equipment
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Condition
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Operational
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Availability
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="p-8 text-center"><LoadingBars /></td>
+                <td colSpan={6} className="p-8 text-center">
+                  <LoadingBars />
+                </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-8 text-center text-slate-500">{error ? "Records could not be loaded. Try again above." : search ? "No assets match this search. Try a different asset or serial code." : "No physical assets yet. Open Add physical asset above to record each equipment unit."}</td>
+                <td colSpan={6} className="p-8 text-center text-slate-500">
+                  {error
+                    ? "Records could not be loaded. Try again above."
+                    : search
+                      ? "No assets match this search. Try a different asset or serial code."
+                      : "No physical assets yet. Open Add physical asset above to record each equipment unit."}
+                </td>
               </tr>
             ) : (
               rows.map((row) => (
@@ -316,13 +439,27 @@ export function AssetsManager() {
                   <td className="px-4 py-3 capitalize">
                     {row.currentCondition}
                   </td>
-                  <td className="px-4 py-3"><StatusBadge status={row.operationalStatus} /></td>
-                  <td className="px-4 py-3"><StatusBadge status={row.availabilityStatus} /></td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={row.operationalStatus} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={row.availabilityStatus} />
+                  </td>
                   <td className="space-x-3 px-4 py-3">
-                    <button disabled={busy}
+                    <button
+                      disabled={busy}
                       className="font-medium text-green-800"
                       onClick={() => {
-                        if (editor.current) { editor.current.open = true; editor.current.scrollIntoView({ block: "start" }); requestAnimationFrame(() => editor.current?.querySelector<HTMLInputElement>("input, select")?.focus()); } setEditing(row.id);
+                        if (editor.current) {
+                          editor.current.open = true;
+                          editor.current.scrollIntoView({ block: "start" });
+                          requestAnimationFrame(() =>
+                            editor.current
+                              ?.querySelector<HTMLInputElement>("input, select")
+                              ?.focus(),
+                          );
+                        }
+                        setEditing(row.id);
                         setValues({
                           equipmentCatalogId: row.equipmentCatalogId,
                           assetCode: row.assetCode,
@@ -346,7 +483,8 @@ export function AssetsManager() {
                       QR
                     </a>
                     {!row.archivedAt && (
-                      <button disabled={busy}
+                      <button
+                        disabled={busy}
                         className="text-slate-600"
                         onClick={() => archive(row)}
                       >
@@ -360,7 +498,16 @@ export function AssetsManager() {
           </tbody>
         </table>
       </div>
-      <Pagination page={page} total={total} label="assets" loading={loading} onPageChange={(next) => { setLoading(true); setPage(next); }} />
+      <Pagination
+        page={page}
+        total={total}
+        label="assets"
+        loading={loading}
+        onPageChange={(next) => {
+          setLoading(true);
+          setPage(next);
+        }}
+      />
     </div>
   );
 }

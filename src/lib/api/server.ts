@@ -32,7 +32,9 @@ export async function optionalProfile(): Promise<Profile | null> {
   const incoming = await headers();
   const cookie = incoming.get("cookie");
   if (!cookie) return null;
-  const origin = (process.env.API_INTERNAL_URL ?? "http://localhost:4000").replace(/\/$/, "");
+  const origin = (
+    process.env.API_INTERNAL_URL ?? "http://localhost:4000"
+  ).replace(/\/$/, "");
   try {
     const response = await fetch(`${origin}/api/v1/me/`, {
       headers: { cookie },
@@ -47,7 +49,9 @@ export async function optionalProfile(): Promise<Profile | null> {
 }
 
 export async function serverApi<T>(path: string): Promise<T> {
-  const origin = (process.env.API_INTERNAL_URL ?? "http://localhost:4000").replace(/\/$/, "");
+  const origin = (
+    process.env.API_INTERNAL_URL ?? "http://localhost:4000"
+  ).replace(/\/$/, "");
   const incoming = await headers();
   const response = await fetch(`${origin}${apiPath(path)}`, {
     headers: { cookie: incoming.get("cookie") ?? "" },
@@ -63,6 +67,13 @@ export async function serverApi<T>(path: string): Promise<T> {
 export async function requirePageRole(role: Profile["role"]) {
   const profile = await serverApi<Profile>("/api/v1/me/");
   if (profile.accountStatus !== "active") redirect("/pending/");
-  if (profile.role !== role) redirect(profile.role === "super_admin" ? "/super-admin/" : profile.role === "admin" ? "/admin/" : "/portal/");
+  if (profile.role !== role)
+    redirect(
+      profile.role === "super_admin"
+        ? "/super-admin/"
+        : profile.role === "admin"
+          ? "/admin/"
+          : "/portal/",
+    );
   return profile;
 }

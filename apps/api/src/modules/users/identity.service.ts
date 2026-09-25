@@ -80,15 +80,16 @@ export async function createFirstSuperAdmin(input: z.infer<typeof setupInput>) {
           accountStatus: "active",
         })
         .returning({ id: users.id });
-      await tx
-        .insert(auditLogs)
-        .values({
-          actorUserId: profile.id,
-          action: "first_super_admin_created",
-          entityType: "users",
-          entityId: profile.id,
-          metadata: { institutionalId: input.institutionalId, role: "super_admin" },
-        });
+      await tx.insert(auditLogs).values({
+        actorUserId: profile.id,
+        action: "first_super_admin_created",
+        entityType: "users",
+        entityId: profile.id,
+        metadata: {
+          institutionalId: input.institutionalId,
+          role: "super_admin",
+        },
+      });
       return { id: profile.id };
     });
   } catch (error) {
@@ -161,14 +162,15 @@ export async function registerStudentFaculty(
           accountStatus: "pending",
         })
         .returning({ id: users.id });
-      await tx
-        .insert(auditLogs)
-        .values({
-          action: "student_faculty_registered",
-          entityType: "users",
-          entityId: profile.id,
-          metadata: { institutionalId: input.institutionalId, personType: input.personType },
-        });
+      await tx.insert(auditLogs).values({
+        action: "student_faculty_registered",
+        entityType: "users",
+        entityId: profile.id,
+        metadata: {
+          institutionalId: input.institutionalId,
+          personType: input.personType,
+        },
+      });
       return { id: profile.id, accountStatus: "pending" as const };
     });
   } catch (error) {
@@ -191,12 +193,25 @@ export async function createAdmin(
       const [existingProfile] = await tx
         .select({ email: users.email, institutionalId: users.institutionalId })
         .from(users)
-        .where(or(eq(users.email, input.email), eq(users.institutionalId, input.institutionalId)))
+        .where(
+          or(
+            eq(users.email, input.email),
+            eq(users.institutionalId, input.institutionalId),
+          ),
+        )
         .limit(1);
       if (existingProfile?.email.toLowerCase() === input.email)
-        throw new AppError(409, "EMAIL_EXISTS", "That email address is already registered.");
+        throw new AppError(
+          409,
+          "EMAIL_EXISTS",
+          "That email address is already registered.",
+        );
       if (existingProfile?.institutionalId === input.institutionalId)
-        throw new AppError(409, "INSTITUTIONAL_ID_EXISTS", "That institutional ID is already registered.");
+        throw new AppError(
+          409,
+          "INSTITUTIONAL_ID_EXISTS",
+          "That institutional ID is already registered.",
+        );
       if (input.departmentId) {
         const [department] = await tx
           .select({ id: departments.id })
@@ -239,15 +254,13 @@ export async function createAdmin(
           accountStatus: "active",
         })
         .returning({ id: users.id });
-      await tx
-        .insert(auditLogs)
-        .values({
-          actorUserId: actorId,
-          action: "admin.created",
-          entityType: "users",
-          entityId: profile.id,
-          metadata: { institutionalId: input.institutionalId, role: "admin" },
-        });
+      await tx.insert(auditLogs).values({
+        actorUserId: actorId,
+        action: "admin.created",
+        entityType: "users",
+        entityId: profile.id,
+        metadata: { institutionalId: input.institutionalId, role: "admin" },
+      });
       return { id: profile.id };
     });
   } catch (error) {

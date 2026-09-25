@@ -1,5 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import { profileUpdateInput, registrationInput, setupInput, staffInput } from "@lsms/shared";
+import {
+  profileUpdateInput,
+  registrationInput,
+  setupInput,
+  staffInput,
+} from "@lsms/shared";
 import { requirePermission } from "../../auth/authorize";
 import { requireActiveProfile, requireProfile } from "../../auth/authorize";
 import { updateAccountDetails } from "./accounts.service";
@@ -52,7 +57,12 @@ export async function identityRoutes(app: FastifyInstance) {
 
   app.patch("/api/v1/me/", async (request) => {
     const actor = await requireActiveProfile(request);
-    return updateAccountDetails(actor.id, profileUpdateInput.parse(request.body), actor.id, actor.role);
+    return updateAccountDetails(
+      actor.id,
+      profileUpdateInput.parse(request.body),
+      actor.id,
+      actor.role,
+    );
   });
 
   app.post("/api/v1/staff/", async (request, reply) => {

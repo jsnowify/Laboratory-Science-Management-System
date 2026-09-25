@@ -50,6 +50,7 @@ export async function updateDraft(id: string, input: RequestInput, borrowerId: s
 export async function listRequests(input: ListInput, actor: { id: string; role: string }) {
   if (actor.role === "admin") throw new AppError(403, "FORBIDDEN", "Borrowing operations are restricted to the Super Admin.");
   const filter = and(actor.role === "student_faculty" ? eq(borrowRequests.borrowerId, actor.id) : undefined,
+    input.history ? inArray(borrowRequests.status, ["rejected", "returned", "cancelled"]) : undefined,
     input.status ? eq(borrowRequests.status, input.status) : undefined,
     input.q ? or(ilike(borrowRequests.requestNumber, `%${input.q}%`), ilike(borrowRequests.purpose, `%${input.q}%`)) : undefined);
   const [data, totals] = await Promise.all([

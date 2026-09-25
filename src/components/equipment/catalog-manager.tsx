@@ -1,6 +1,8 @@
 "use client";
+import { LoadingBars } from "@/components/ui/loading-skeleton";
 
 import { ErrorNotice } from "@/components/ui/error-notice";
+import { CustomSelect } from "@/components/ui/custom-select";
 import { Pagination } from "@/components/ui/pagination";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { catalogInput } from "@lsms/shared";
@@ -163,7 +165,7 @@ export function CatalogManager() {
           Search
         </button>
       </form>
-      <details ref={editor} className="ui-panel max-w-4xl"><summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-green-800">{editing ? "Edit equipment type" : "Add equipment type"}</summary><form
+      <details ref={editor} className="ui-panel"><summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-green-800">{editing ? "Edit equipment type" : "Add equipment type"}</summary><form
         onSubmit={save}
         className="border-t border-slate-200 p-4 sm:p-5"
       >
@@ -176,22 +178,7 @@ export function CatalogManager() {
             label="Category"
             error={fields.categoryId?.[0]}
           >
-            <select
-              id="categoryId"
-              required
-              className={inputClass}
-              value={values.categoryId}
-              onChange={(event) =>
-                setValues({ ...values, categoryId: event.target.value })
-              }
-            >
-              <option value="">Choose category</option>
-              {categories.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+            <CustomSelect id="categoryId" label="Category" required invalid={Boolean(fields.categoryId)} value={values.categoryId} placeholder="Choose category" emptyMessage="No categories yet. Add a category before creating an equipment type." options={categories.map((item) => ({ value: item.id, label: item.name }))} onValueChange={(value) => setValues({ ...values, categoryId: value })} />
           </FormField>
           {(
             [
@@ -265,13 +252,11 @@ export function CatalogManager() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="p-8 text-center">
-                  Loading…
-                </td>
+                <td colSpan={6} className="p-8 text-center"><LoadingBars /></td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-8 text-center text-slate-500">{error ? "Records could not be loaded. Try again above." : "No catalog items found."}</td>
+                <td colSpan={6} className="p-8 text-center text-slate-500">{error ? "Records could not be loaded. Try again above." : search ? "No equipment types match this search. Try a different name." : "No equipment types yet. Add a category first, then create an equipment type."}</td>
               </tr>
             ) : (
               rows.map((row) => (

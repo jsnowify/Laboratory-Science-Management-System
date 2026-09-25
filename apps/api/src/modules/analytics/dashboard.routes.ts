@@ -9,14 +9,16 @@ export async function dashboardRoutes(app: FastifyInstance) {
   app.get("/api/v1/dashboard/", async (request) => {
     const actor = await requireActiveProfile(request);
     if (actor.role === "super_admin") {
-      const [requests, custody, overdue, returns] = await Promise.all([
+      const [requests, custody, overdue, returns, audit, activity] = await Promise.all([
         database().execute(sql`select status::text as status, count(*)::int as total from borrow_requests group by status`),
         database().execute(sql`select count(*)::int as total from vw_current_custody`),
         database().execute(sql`select count(*)::int as total from vw_overdue_loans`),
         database().execute(sql`select count(*)::int as total from return_records where returned_at > now() - interval '7 days'`),
+        database().execute(sql`select count(*)::int as total, count(*) filter (where u.role = 'admin')::int as admin_total from audit_logs a left join users u on u.id = a.actor_user_id`),
+        database().execute(sql`select a.id, a.action, a.entity_type as "entityType", a.created_at as "createdAt", u.first_name as "firstName", u.last_name as "lastName", u.role as "actorRole" from audit_logs a left join users u on u.id = a.actor_user_id order by a.created_at desc, a.id desc limit 8`),
       ]);
       const countStatus = (status: string) => Number(requests.find((row) => row.status === status)?.total ?? 0);
-      return { cards: [
+      return { audit: { total: Number(audit[0]?.total ?? 0), adminTotal: Number(audit[0]?.admin_total ?? 0), recent: activity }, cards: [
         { label: "Submitted requests", value: countStatus("submitted") }, { label: "Under review", value: countStatus("under_review") },
         { label: "Ready for release", value: countStatus("ready_for_release") }, { label: "Borrowed assets", value: Number(custody[0].total) },
         { label: "Overdue assets", value: Number(overdue[0].total) }, { label: "Returns this week", value: Number(returns[0].total) },

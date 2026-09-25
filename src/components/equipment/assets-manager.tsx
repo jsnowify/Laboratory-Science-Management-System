@@ -1,4 +1,5 @@
 "use client";
+import { LoadingBars } from "@/components/ui/loading-skeleton";
 
 import { ErrorNotice } from "@/components/ui/error-notice";
 import { Pagination } from "@/components/ui/pagination";
@@ -7,6 +8,7 @@ import { assetInput } from "@lsms/shared";
 import { ApiError, apiRequest } from "@/lib/api/client";
 import { useFeedback } from "@/components/ui/feedback-provider";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { CustomSelect } from "@/components/ui/custom-select";
 import {
   FormField,
   inputClass,
@@ -171,7 +173,7 @@ export function AssetsManager() {
           Search
         </button>
       </form>
-      <details ref={editor} className="ui-panel max-w-4xl"><summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-green-800">{editing ? "Edit physical asset" : "Add physical asset"}</summary><form
+      <details ref={editor} className="ui-panel"><summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-green-800">{editing ? "Edit physical asset" : "Add physical asset"}</summary><form
         onSubmit={save}
         className="border-t border-slate-200 p-4 sm:p-5"
       >
@@ -184,22 +186,7 @@ export function AssetsManager() {
             label="Equipment type"
             error={fields.equipmentCatalogId?.[0]}
           >
-            <select
-              id="equipmentCatalogId"
-              required
-              className={inputClass}
-              value={values.equipmentCatalogId}
-              onChange={(event) =>
-                setValues({ ...values, equipmentCatalogId: event.target.value })
-              }
-            >
-              <option value="">Choose equipment</option>
-              {catalog.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.equipmentName}
-                </option>
-              ))}
-            </select>
+            <CustomSelect id="equipmentCatalogId" label="Equipment type" required invalid={Boolean(fields.equipmentCatalogId)} value={values.equipmentCatalogId} placeholder="Choose equipment" emptyMessage="No equipment types yet. Add an equipment category and type before recording an asset." options={catalog.map((item) => ({ value: item.id, label: item.equipmentName ?? "Equipment" }))} onValueChange={(value) => setValues({ ...values, equipmentCatalogId: value })} />
           </FormField>
           <FormField
             id="assetCode"
@@ -235,65 +222,21 @@ export function AssetsManager() {
             label="Department (optional)"
             error={fields.departmentId?.[0]}
           >
-            <select
-              id="departmentId"
-              className={inputClass}
-              value={values.departmentId}
-              onChange={(event) =>
-                setValues({ ...values, departmentId: event.target.value })
-              }
-            >
-              <option value="">No department</option>
-              {departments.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+            <CustomSelect id="departmentId" label="Department (optional)" value={values.departmentId} placeholder="No department" emptyMessage="No departments have been added yet. You can leave this asset unassigned." options={[{ value: "", label: "No department" }, ...departments.map((item) => ({ value: item.id, label: item.name ?? "Department" }))]} onValueChange={(value) => setValues({ ...values, departmentId: value })} />
           </FormField>
           <FormField
             id="currentCondition"
             label="Condition"
             error={fields.currentCondition?.[0]}
           >
-            <select
-              id="currentCondition"
-              className={inputClass}
-              value={values.currentCondition}
-              onChange={(event) =>
-                setValues({
-                  ...values,
-                  currentCondition: event.target
-                    .value as Asset["currentCondition"],
-                })
-              }
-            >
-              {["excellent", "good", "fair", "damaged"].map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
+            <CustomSelect id="currentCondition" label="Condition" value={values.currentCondition} placeholder="Choose condition" options={["excellent", "good", "fair", "damaged"].map((item) => ({ value: item, label: item[0].toUpperCase() + item.slice(1) }))} onValueChange={(value) => setValues({ ...values, currentCondition: value as Asset["currentCondition"] })} />
           </FormField>
           <FormField
             id="operationalStatus"
             label="Operational status"
             error={fields.operationalStatus?.[0]}
           >
-            <select
-              id="operationalStatus"
-              className={inputClass}
-              value={values.operationalStatus}
-              onChange={(event) =>
-                setValues({
-                  ...values,
-                  operationalStatus: event.target
-                    .value as Asset["operationalStatus"],
-                })
-              }
-            >
-              {["active", "maintenance", "damaged", "retired"].map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
+            <CustomSelect id="operationalStatus" label="Operational status" value={values.operationalStatus} placeholder="Choose status" options={["active", "maintenance", "damaged", "retired"].map((item) => ({ value: item, label: item[0].toUpperCase() + item.slice(1) }))} onValueChange={(value) => setValues({ ...values, operationalStatus: value as Asset["operationalStatus"] })} />
           </FormField>
           <FormField
             id="acquisitionDate"
@@ -359,13 +302,11 @@ export function AssetsManager() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="p-8 text-center">
-                  Loading…
-                </td>
+                <td colSpan={6} className="p-8 text-center"><LoadingBars /></td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-8 text-center text-slate-500">{error ? "Records could not be loaded. Try again above." : "No physical assets found."}</td>
+                <td colSpan={6} className="p-8 text-center text-slate-500">{error ? "Records could not be loaded. Try again above." : search ? "No assets match this search. Try a different asset or serial code." : "No physical assets yet. Open Add physical asset above to record each equipment unit."}</td>
               </tr>
             ) : (
               rows.map((row) => (

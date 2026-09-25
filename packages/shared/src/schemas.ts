@@ -1,7 +1,8 @@
 import { z } from "zod";
 
-const name = z.string().trim().min(1).max(100);
-const email = z.email().max(255).transform((value) => value.toLowerCase());
+const unsafeInline = /[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/u;
+const name = z.string().trim().min(1).max(100).refine((value) => !unsafeInline.test(value), "Remove control or hidden direction characters.");
+const email = z.string().trim().pipe(z.email().max(255)).transform((value) => value.toLowerCase());
 export const strongPassword = z.string()
   .min(12, "Use at least 12 characters.")
   .max(128)
@@ -11,9 +12,9 @@ export const strongPassword = z.string()
   .regex(/[^A-Za-z0-9]/, "Add a special character.");
 
 export const identityInput = z.object({
-  institutionalId: z.string().trim().min(2).max(50),
+  institutionalId: z.string().trim().min(2).max(50).refine((value) => !unsafeInline.test(value), "Remove control or hidden direction characters."),
   firstName: name,
-  middleName: z.string().trim().max(100).optional(),
+  middleName: z.string().trim().max(100).refine((value) => !unsafeInline.test(value), "Remove control or hidden direction characters.").optional(),
   lastName: name,
   email,
   password: strongPassword,
@@ -55,8 +56,15 @@ export const departmentUpdate = departmentInput.partial().extend({ isActive: z.b
   .refine((value) => Object.keys(value).length > 0, "Provide at least one field.");
 export const userListQuery = listQuery.extend({
   status: z.enum(["pending", "active", "suspended", "archived"]).optional(),
+  role: z.enum(["super_admin", "admin", "student_faculty"]).optional(),
 });
 export const userStatusInput = z.object({ status: z.enum(["active", "suspended", "archived"]) });
+export const profileUpdateInput = z.strictObject({
+  firstName: name,
+  middleName: z.string().trim().max(100).refine((value) => !unsafeInline.test(value), "Remove control or hidden direction characters."),
+  lastName: name,
+  email,
+});
 export const categoryInput = z.object({ name: z.string().trim().min(1).max(100), description: z.string().trim().max(2000).optional() });
 export const categoryUpdate = categoryInput.partial().extend({ isActive: z.boolean().optional() }).refine((value) => Object.keys(value).length > 0);
 export const catalogInput = z.object({
@@ -101,4 +109,4 @@ export const returnInput = z.object({
   remarks: z.string().trim().max(2000).optional(),
 }).refine((value) => value.outcome === "normal" || Boolean(value.remarks), { path: ["remarks"], message: "Add remarks for damage or maintenance." })
   .refine((value) => value.conditionAfter !== "damaged" || value.outcome === "damaged", { path: ["outcome"], message: "A damaged condition requires a damaged outcome." });
-export const borrowListQuery = listQuery.extend({ status: z.enum(["draft", "submitted", "under_review", "approved", "rejected", "ready_for_release", "borrowed", "partially_returned", "returned", "cancelled"]).optional() });
+export const borrowListQuery = listQuery.extend({ status: z.enum(["draft", "submitted", "under_review", "approved", "rejected", "ready_for_release", "borrowed", "partially_returned", "returned", "cancelled"]).optional(), history: z.literal("true").optional() });

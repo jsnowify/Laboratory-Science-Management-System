@@ -87,6 +87,7 @@ export async function createFirstSuperAdmin(input: z.infer<typeof setupInput>) {
           action: "first_super_admin_created",
           entityType: "users",
           entityId: profile.id,
+          metadata: { institutionalId: input.institutionalId, role: "super_admin" },
         });
       return { id: profile.id };
     });
@@ -166,6 +167,7 @@ export async function registerStudentFaculty(
           action: "student_faculty_registered",
           entityType: "users",
           entityId: profile.id,
+          metadata: { institutionalId: input.institutionalId, personType: input.personType },
         });
       return { id: profile.id, accountStatus: "pending" as const };
     });
@@ -244,6 +246,7 @@ export async function createAdmin(
           action: "admin.created",
           entityType: "users",
           entityId: profile.id,
+          metadata: { institutionalId: input.institutionalId, role: "admin" },
         });
       return { id: profile.id };
     });

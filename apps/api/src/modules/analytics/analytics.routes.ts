@@ -30,7 +30,7 @@ const reports = {
 
 function csvCell(value: unknown) {
   const raw = value === null || value === undefined ? "" : value instanceof Date ? value.toISOString() : String(value);
-  const safe = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
+  const safe = /^[\s\u0000-\u001f]*[=+\-@]/.test(raw) ? `'${raw}` : raw;
   return `"${safe.replaceAll('"', '""')}"`;
 }
 

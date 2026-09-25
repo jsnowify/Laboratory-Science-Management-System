@@ -2,6 +2,7 @@ import "server-only";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { apiPath } from "./client";
+import { z } from "zod";
 
 export type Profile = {
   id: string;
@@ -14,6 +15,36 @@ export type Profile = {
   email: string;
   accountStatus: "pending" | "active" | "suspended" | "archived";
 };
+
+export const profileSchema: z.ZodType<Profile> = z.object({
+  id: z.uuid(),
+  institutionalId: z.string(),
+  role: z.enum(["super_admin", "admin", "student_faculty"]),
+  personType: z.enum(["student", "faculty"]).nullable(),
+  firstName: z.string(),
+  middleName: z.string().nullable(),
+  lastName: z.string(),
+  email: z.email(),
+  accountStatus: z.enum(["pending", "active", "suspended", "archived"]),
+});
+
+export async function optionalProfile(): Promise<Profile | null> {
+  const incoming = await headers();
+  const cookie = incoming.get("cookie");
+  if (!cookie) return null;
+  const origin = (process.env.API_INTERNAL_URL ?? "http://localhost:4000").replace(/\/$/, "");
+  try {
+    const response = await fetch(`${origin}/api/v1/me/`, {
+      headers: { cookie },
+      cache: "no-store",
+    });
+    if (response.status === 401 || response.status === 403) return null;
+    if (!response.ok) return null;
+    return profileSchema.parse(await response.json());
+  } catch {
+    return null;
+  }
+}
 
 export async function serverApi<T>(path: string): Promise<T> {
   const origin = (process.env.API_INTERNAL_URL ?? "http://localhost:4000").replace(/\/$/, "");

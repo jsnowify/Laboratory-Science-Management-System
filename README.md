@@ -1,6 +1,6 @@
 # LSMS
 
-Laboratory Science Management System for the Research and Laboratory Services Center. It manages institutional accounts, organization data, equipment, borrowing and custody, returns, ISO requisition records, notifications, and reports.
+Laboratory Science Management System. It manages institutional accounts, organization data, equipment, borrowing and custody, returns, ISO requisition records, notifications, and reports.
 
 ## Architecture
 
@@ -60,8 +60,8 @@ The designated first Super Admin enters their institutional ID, name, designated
 
 ## Main workflows
 
-- Super Admin: organization records; Admin creation; borrowing review, approval, allocation, release, custody, overdue and accountability; ISO requisitions; reports.
-- Admin: account activation and status changes; categories, catalog and physical assets; QR identifiers; analytics and reports.
+- Super Admin: organization records; Admin creation; borrowing review, approval, allocation, release, custody, overdue and accountability; ISO requisitions; reports; system-wide audit activity.
+- Admin: account activation; categories, catalog and physical assets; QR identifiers; analytics and reports; audit activity from student and faculty accounts only.
 - Student/Faculty: equipment browsing, borrowing drafts and submission, request history, custody, accountability and profile.
 - System: notifications, audit records, PostgreSQL backed availability and descriptive analytics.
 

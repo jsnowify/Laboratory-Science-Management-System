@@ -10,10 +10,12 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import { fromNodeHeaders as fromNodeHeaders2 } from "better-auth/node";
+import { eq as eq12 } from "drizzle-orm";
 
 // ../../packages/shared/src/permissions.ts
 var permissions = {
   "organization.read": ["super_admin"],
+  "audit.read": ["super_admin", "admin"],
   "users.create_admin": ["super_admin"],
   "organization.write": ["super_admin"],
   "borrowing.review": ["super_admin"],
@@ -27,8 +29,9 @@ var permissions = {
   "accountability.read": ["super_admin"],
   "equipment.write": ["admin"],
   "users.manage": ["admin"],
+  "users.manage_all": ["super_admin"],
   "qr.manage": ["admin"],
-  "analytics.read": ["admin"],
+  "analytics.read": ["admin", "super_admin"],
   "reports.read": ["admin"],
   "equipment.read": ["student_faculty", "admin", "super_admin"],
   "borrow_request.create": ["student_faculty"],
@@ -86,9 +89,16 @@ var organizationUpdate = organizationInput.partial().extend({ isActive: z.boolea
 var courseUpdate = courseInput.partial().extend({ isActive: z.boolean().optional() }).refine((value) => Object.keys(value).length > 0, "Provide at least one field.");
 var departmentUpdate = departmentInput.partial().extend({ isActive: z.boolean().optional() }).refine((value) => Object.keys(value).length > 0, "Provide at least one field.");
 var userListQuery = listQuery.extend({
-  status: z.enum(["pending", "active", "suspended", "archived"]).optional()
+  status: z.enum(["pending", "active", "suspended", "archived"]).optional(),
+  role: z.enum(["super_admin", "admin", "student_faculty"]).optional()
 });
 var userStatusInput = z.object({ status: z.enum(["active", "suspended", "archived"]) });
+var profileUpdateInput = z.strictObject({
+  firstName: name,
+  middleName: z.string().trim().max(100),
+  lastName: name,
+  email
+});
 var categoryInput = z.object({ name: z.string().trim().min(1).max(100), description: z.string().trim().max(2e3).optional() });
 var categoryUpdate = categoryInput.partial().extend({ isActive: z.boolean().optional() }).refine((value) => Object.keys(value).length > 0);
 var catalogInput = z.object({
@@ -139,7 +149,7 @@ var returnInput = z.object({
   outcome: z.enum(["normal", "damaged", "maintenance_required"]),
   remarks: z.string().trim().max(2e3).optional()
 }).refine((value) => value.outcome === "normal" || Boolean(value.remarks), { path: ["remarks"], message: "Add remarks for damage or maintenance." }).refine((value) => value.conditionAfter !== "damaged" || value.outcome === "damaged", { path: ["outcome"], message: "A damaged condition requires a damaged outcome." });
-var borrowListQuery = listQuery.extend({ status: z.enum(["draft", "submitted", "under_review", "approved", "rejected", "ready_for_release", "borrowed", "partially_returned", "returned", "cancelled"]).optional() });
+var borrowListQuery = listQuery.extend({ status: z.enum(["draft", "submitted", "under_review", "approved", "rejected", "ready_for_release", "borrowed", "partially_returned", "returned", "cancelled"]).optional(), history: z.literal("true").optional() });
 
 // src/auth/auth.ts
 import { betterAuth } from "better-auth";
@@ -938,9 +948,121 @@ async function requirePermission(request, permission) {
   return profile;
 }
 
+// src/modules/users/accounts.service.ts
+import { and, count, eq as eq2, ilike, ne, or, sql as sql2 } from "drizzle-orm";
+
+// src/modules/users/account-rules.ts
+function canSetStatus(from, to) {
+  return from === "pending" && (to === "active" || to === "archived") || from === "active" && (to === "suspended" || to === "archived") || from === "suspended" && (to === "active" || to === "archived");
+}
+function canAdminChangeStatus(role, from, to) {
+  return role === "student_faculty" && from === "pending" && to === "active";
+}
+function canSuperAdminChangeStatus(targetRole, from, to, isSelf, hasOtherActiveSuperAdmin) {
+  return canSetStatus(from, to) && !(isSelf && to !== "active") && !(targetRole === "super_admin" && from === "active" && to !== "active" && !hasOtherActiveSuperAdmin);
+}
+
+// src/modules/users/accounts.service.ts
+async function listManageableUsers(input, actorRole) {
+  const filter = and(
+    actorRole === "admin" ? eq2(users.role, "student_faculty") : input.role ? eq2(users.role, input.role) : void 0,
+    input.status ? eq2(users.accountStatus, input.status) : void 0,
+    input.q ? or(
+      ilike(users.firstName, `%${input.q}%`),
+      ilike(users.lastName, `%${input.q}%`),
+      ilike(users.institutionalId, `%${input.q}%`),
+      ilike(users.email, `%${input.q}%`)
+    ) : void 0
+  );
+  const [rows, totals] = await Promise.all([
+    database().select({
+      id: users.id,
+      institutionalId: users.institutionalId,
+      role: users.role,
+      personType: users.personType,
+      firstName: users.firstName,
+      middleName: users.middleName,
+      lastName: users.lastName,
+      email: users.email,
+      accountStatus: users.accountStatus,
+      createdAt: users.createdAt
+    }).from(users).where(filter).orderBy(users.createdAt).limit(input.limit).offset((input.page - 1) * input.limit),
+    database().select({ total: count() }).from(users).where(filter)
+  ]);
+  return {
+    data: rows,
+    total: totals[0].total,
+    page: input.page,
+    limit: input.limit
+  };
+}
+async function changeUserStatus(id, input, actorId, actorRole) {
+  return database().transaction(async (tx) => {
+    if (actorRole === "super_admin") await tx.execute(sql2`select pg_advisory_xact_lock(742611931)`);
+    const [target] = await tx.select().from(users).where(eq2(users.id, id)).for("update").limit(1);
+    if (!target) throw new AppError(404, "NOT_FOUND", "User not found.");
+    if (actorRole === "admin" && !canAdminChangeStatus(target.role, target.accountStatus, input.status))
+      throw new AppError(403, "FORBIDDEN", "Admins can only activate pending student or faculty accounts.");
+    if (actorRole !== "super_admin" && actorRole !== "admin") throw new AppError(403, "FORBIDDEN", "You cannot manage account statuses.");
+    let hasOtherActiveSuperAdmin = true;
+    if (actorRole === "super_admin" && target.role === "super_admin" && target.accountStatus === "active" && input.status !== "active") {
+      const [other] = await tx.select({ id: users.id }).from(users).where(and(eq2(users.role, "super_admin"), eq2(users.accountStatus, "active"), ne(users.id, id))).limit(1);
+      hasOtherActiveSuperAdmin = Boolean(other);
+    }
+    if (actorRole === "super_admin" && !canSuperAdminChangeStatus(target.role, target.accountStatus, input.status, id === actorId, hasOtherActiveSuperAdmin)) {
+      if (id === actorId) throw new AppError(409, "OWN_ACCOUNT", "You cannot suspend or archive your own account.");
+      if (!hasOtherActiveSuperAdmin) throw new AppError(409, "LAST_SUPER_ADMIN", "The last active Super Admin cannot be disabled.");
+      throw new AppError(409, "INVALID_STATUS", "This account status change is not allowed.");
+    }
+    if (!canSetStatus(target.accountStatus, input.status))
+      throw new AppError(
+        409,
+        "INVALID_STATUS",
+        "This account status change is not allowed."
+      );
+    const [row] = await tx.update(users).set({
+      accountStatus: input.status,
+      archivedAt: input.status === "archived" ? (/* @__PURE__ */ new Date()).toISOString() : null,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    }).where(eq2(users.id, id)).returning({ id: users.id, accountStatus: users.accountStatus });
+    await tx.insert(auditLogs).values({
+      actorUserId: actorId,
+      action: `user.${input.status}`,
+      entityType: "users",
+      entityId: id,
+      metadata: { previousStatus: target.accountStatus, newStatus: input.status, targetRole: target.role, targetInstitutionalId: target.institutionalId }
+    });
+    await tx.insert(notifications).values({
+      userId: id,
+      notificationType: "account_status",
+      title: "Account status changed",
+      message: input.status === "active" ? "Your LSMS account is active." : `Your LSMS account is ${input.status}.`,
+      relatedEntityType: "users",
+      relatedEntityId: id
+    });
+    return row;
+  });
+}
+async function updateAccountDetails(id, input, actorId, actorRole) {
+  if (actorId !== id && actorRole !== "super_admin") throw new AppError(403, "FORBIDDEN", "You can only update your own profile.");
+  return database().transaction(async (tx) => {
+    const [target] = await tx.select().from(users).where(eq2(users.id, id)).for("update").limit(1);
+    if (!target) throw new AppError(404, "NOT_FOUND", "User not found.");
+    if (!target.authUserId) throw new AppError(409, "AUTH_MISSING", "This account has no sign-in record.");
+    const [duplicate] = await tx.select({ id: users.id }).from(users).where(eq2(users.email, input.email)).limit(1);
+    if (duplicate && duplicate.id !== id) throw new AppError(409, "EMAIL_EXISTS", "That email address is already in use.");
+    const fullName = [input.firstName, input.middleName, input.lastName].filter(Boolean).join(" ");
+    const [authRow] = await tx.update(authUser).set({ name: fullName, email: input.email, emailVerified: target.email.toLowerCase() === input.email ? void 0 : false, updatedAt: /* @__PURE__ */ new Date() }).where(eq2(authUser.id, target.authUserId)).returning({ id: authUser.id });
+    if (!authRow) throw new AppError(409, "AUTH_MISSING", "This account has no sign-in record.");
+    const [row] = await tx.update(users).set({ firstName: input.firstName, middleName: input.middleName || null, lastName: input.lastName, email: input.email, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }).where(eq2(users.id, id)).returning({ id: users.id, firstName: users.firstName, middleName: users.middleName, lastName: users.lastName, email: users.email });
+    await tx.insert(auditLogs).values({ actorUserId: actorId, action: actorId === id ? "profile.updated" : "user.profile_updated", entityType: "users", entityId: id, metadata: { targetInstitutionalId: target.institutionalId, changedFields: ["firstName", "middleName", "lastName", "email"].filter((field) => String(target[field] ?? "") !== String(input[field] ?? "")) } });
+    return row;
+  });
+}
+
 // src/modules/users/identity.service.ts
 import { timingSafeEqual } from "crypto";
-import { and, eq as eq2, or, sql as sql2 } from "drizzle-orm";
+import { and as and2, eq as eq3, or as or2, sql as sql3 } from "drizzle-orm";
 function equalSecret(left, right) {
   const a = Buffer.from(left);
   const b = Buffer.from(right);
@@ -948,7 +1070,7 @@ function equalSecret(left, right) {
 }
 async function setupAvailable() {
   const [existing] = await database().select({ id: users.id }).from(users).where(
-    and(eq2(users.role, "super_admin"), eq2(users.accountStatus, "active"))
+    and2(eq3(users.role, "super_admin"), eq3(users.accountStatus, "active"))
   ).limit(1);
   return !existing;
 }
@@ -963,9 +1085,9 @@ async function createFirstSuperAdmin(input) {
   let authId;
   try {
     return await database().transaction(async (tx) => {
-      await tx.execute(sql2`select pg_advisory_xact_lock(742611930)`);
+      await tx.execute(sql3`select pg_advisory_xact_lock(742611930)`);
       const [existing] = await tx.select({ id: users.id }).from(users).where(
-        and(eq2(users.role, "super_admin"), eq2(users.accountStatus, "active"))
+        and2(eq3(users.role, "super_admin"), eq3(users.accountStatus, "active"))
       ).limit(1);
       if (existing)
         throw new AppError(
@@ -995,13 +1117,14 @@ async function createFirstSuperAdmin(input) {
         actorUserId: profile.id,
         action: "first_super_admin_created",
         entityType: "users",
-        entityId: profile.id
+        entityId: profile.id,
+        metadata: { institutionalId: input.institutionalId, role: "super_admin" }
       });
       return { id: profile.id };
     });
   } catch (error) {
     if (authId)
-      await database().delete(authUser).where(eq2(authUser.id, authId)).catch(() => void 0);
+      await database().delete(authUser).where(eq3(authUser.id, authId)).catch(() => void 0);
     throw error;
   }
 }
@@ -1010,16 +1133,16 @@ async function registerStudentFaculty(input) {
   try {
     return await database().transaction(async (tx) => {
       const [college] = await tx.select({ id: colleges.id }).from(colleges).where(
-        and(eq2(colleges.id, input.collegeId), eq2(colleges.isActive, true))
+        and2(eq3(colleges.id, input.collegeId), eq3(colleges.isActive, true))
       ).limit(1);
       if (!college)
         throw new AppError(422, "INVALID_COLLEGE", "Choose an active college.");
       if (input.courseId) {
         const [course] = await tx.select({ id: courses.id }).from(courses).where(
-          and(
-            eq2(courses.id, input.courseId),
-            eq2(courses.collegeId, input.collegeId),
-            eq2(courses.isActive, true)
+          and2(
+            eq3(courses.id, input.courseId),
+            eq3(courses.collegeId, input.collegeId),
+            eq3(courses.isActive, true)
           )
         ).limit(1);
         if (!course)
@@ -1053,13 +1176,14 @@ async function registerStudentFaculty(input) {
       await tx.insert(auditLogs).values({
         action: "student_faculty_registered",
         entityType: "users",
-        entityId: profile.id
+        entityId: profile.id,
+        metadata: { institutionalId: input.institutionalId, personType: input.personType }
       });
       return { id: profile.id, accountStatus: "pending" };
     });
   } catch (error) {
     if (authId)
-      await database().delete(authUser).where(eq2(authUser.id, authId)).catch(() => void 0);
+      await database().delete(authUser).where(eq3(authUser.id, authId)).catch(() => void 0);
     throw error;
   }
 }
@@ -1067,16 +1191,16 @@ async function createAdmin(input, actorId) {
   let authId;
   try {
     return await database().transaction(async (tx) => {
-      const [existingProfile] = await tx.select({ email: users.email, institutionalId: users.institutionalId }).from(users).where(or(eq2(users.email, input.email), eq2(users.institutionalId, input.institutionalId))).limit(1);
+      const [existingProfile] = await tx.select({ email: users.email, institutionalId: users.institutionalId }).from(users).where(or2(eq3(users.email, input.email), eq3(users.institutionalId, input.institutionalId))).limit(1);
       if (existingProfile?.email.toLowerCase() === input.email)
         throw new AppError(409, "EMAIL_EXISTS", "That email address is already registered.");
       if (existingProfile?.institutionalId === input.institutionalId)
         throw new AppError(409, "INSTITUTIONAL_ID_EXISTS", "That institutional ID is already registered.");
       if (input.departmentId) {
         const [department] = await tx.select({ id: departments.id }).from(departments).where(
-          and(
-            eq2(departments.id, input.departmentId),
-            eq2(departments.isActive, true)
+          and2(
+            eq3(departments.id, input.departmentId),
+            eq3(departments.isActive, true)
           )
         ).limit(1);
         if (!department)
@@ -1109,13 +1233,14 @@ async function createAdmin(input, actorId) {
         actorUserId: actorId,
         action: "admin.created",
         entityType: "users",
-        entityId: profile.id
+        entityId: profile.id,
+        metadata: { institutionalId: input.institutionalId, role: "admin" }
       });
       return { id: profile.id };
     });
   } catch (error) {
     if (authId)
-      await database().delete(authUser).where(eq2(authUser.id, authId)).catch(() => void 0);
+      await database().delete(authUser).where(eq3(authUser.id, authId)).catch(() => void 0);
     throw error;
   }
 }
@@ -1157,6 +1282,10 @@ async function identityRoutes(app2) {
       accountStatus: profile.accountStatus
     };
   });
+  app2.patch("/api/v1/me/", async (request) => {
+    const actor = await requireActiveProfile(request);
+    return updateAccountDetails(actor.id, profileUpdateInput.parse(request.body), actor.id, actor.role);
+  });
   app2.post("/api/v1/staff/", async (request, reply) => {
     const actor = await requirePermission(request, "users.create_admin");
     return reply.code(201).send(await createAdmin(staffInput.parse(request.body), actor.id));
@@ -1167,13 +1296,13 @@ async function identityRoutes(app2) {
 import { z as z3 } from "zod";
 
 // src/modules/organization/organization.service.ts
-import { and as and2, count, eq as eq3, ilike, or as or2 } from "drizzle-orm";
-var whereText = (q, code, name2) => q ? or2(ilike(code, `%${q}%`), ilike(name2, `%${q}%`)) : void 0;
+import { and as and3, count as count2, eq as eq4, ilike as ilike2, or as or3 } from "drizzle-orm";
+var whereText = (q, code, name2) => q ? or3(ilike2(code, `%${q}%`), ilike2(name2, `%${q}%`)) : void 0;
 async function listColleges(input) {
-  const filter = and2(input.includeInactive ? void 0 : eq3(colleges.isActive, true), whereText(input.q, colleges.code, colleges.name));
+  const filter = and3(input.includeInactive ? void 0 : eq4(colleges.isActive, true), whereText(input.q, colleges.code, colleges.name));
   const [rows, totals] = await Promise.all([
     database().select().from(colleges).where(filter).orderBy(colleges.name).limit(input.limit).offset((input.page - 1) * input.limit),
-    database().select({ total: count() }).from(colleges).where(filter)
+    database().select({ total: count2() }).from(colleges).where(filter)
   ]);
   return { data: rows, total: totals[0].total, page: input.page, limit: input.limit };
 }
@@ -1186,26 +1315,26 @@ async function createCollege(input, actorId) {
 }
 async function updateCollege(id, input, actorId) {
   return database().transaction(async (tx) => {
-    const [row] = await tx.update(colleges).set(input).where(eq3(colleges.id, id)).returning();
+    const [row] = await tx.update(colleges).set(input).where(eq4(colleges.id, id)).returning();
     if (!row) throw new AppError(404, "NOT_FOUND", "College not found.");
     await tx.insert(auditLogs).values({ actorUserId: actorId, action: row.isActive ? "college.updated" : "college.deactivated", entityType: "colleges", entityId: id });
     return row;
   });
 }
 async function listCourses(input) {
-  const filter = and2(
-    input.includeInactive ? void 0 : eq3(courses.isActive, true),
-    input.collegeId ? eq3(courses.collegeId, input.collegeId) : void 0,
-    input.q ? or2(ilike(courses.code, `%${input.q}%`), ilike(courses.name, `%${input.q}%`)) : void 0
+  const filter = and3(
+    input.includeInactive ? void 0 : eq4(courses.isActive, true),
+    input.collegeId ? eq4(courses.collegeId, input.collegeId) : void 0,
+    input.q ? or3(ilike2(courses.code, `%${input.q}%`), ilike2(courses.name, `%${input.q}%`)) : void 0
   );
   const [rows, totals] = await Promise.all([
     database().select().from(courses).where(filter).orderBy(courses.name).limit(input.limit).offset((input.page - 1) * input.limit),
-    database().select({ total: count() }).from(courses).where(filter)
+    database().select({ total: count2() }).from(courses).where(filter)
   ]);
   return { data: rows, total: totals[0].total, page: input.page, limit: input.limit };
 }
 async function requireActiveCollege(id) {
-  const [college] = await database().select({ id: colleges.id }).from(colleges).where(and2(eq3(colleges.id, id), eq3(colleges.isActive, true))).limit(1);
+  const [college] = await database().select({ id: colleges.id }).from(colleges).where(and3(eq4(colleges.id, id), eq4(colleges.isActive, true))).limit(1);
   if (!college) throw new AppError(422, "INVALID_COLLEGE", "Choose an active college.");
 }
 async function createCourse(input, actorId) {
@@ -1219,20 +1348,20 @@ async function createCourse(input, actorId) {
 async function updateCourse(id, input, actorId) {
   if (input.collegeId) await requireActiveCollege(input.collegeId);
   return database().transaction(async (tx) => {
-    const [row] = await tx.update(courses).set(input).where(eq3(courses.id, id)).returning();
+    const [row] = await tx.update(courses).set(input).where(eq4(courses.id, id)).returning();
     if (!row) throw new AppError(404, "NOT_FOUND", "Course not found.");
     await tx.insert(auditLogs).values({ actorUserId: actorId, action: row.isActive ? "course.updated" : "course.deactivated", entityType: "courses", entityId: id });
     return row;
   });
 }
 async function listDepartments(input) {
-  const filter = and2(
-    input.includeInactive ? void 0 : eq3(departments.isActive, true),
-    input.q ? or2(ilike(departments.code, `%${input.q}%`), ilike(departments.name, `%${input.q}%`)) : void 0
+  const filter = and3(
+    input.includeInactive ? void 0 : eq4(departments.isActive, true),
+    input.q ? or3(ilike2(departments.code, `%${input.q}%`), ilike2(departments.name, `%${input.q}%`)) : void 0
   );
   const [rows, totals] = await Promise.all([
     database().select().from(departments).where(filter).orderBy(departments.name).limit(input.limit).offset((input.page - 1) * input.limit),
-    database().select({ total: count() }).from(departments).where(filter)
+    database().select({ total: count2() }).from(departments).where(filter)
   ]);
   return { data: rows, total: totals[0].total, page: input.page, limit: input.limit };
 }
@@ -1245,7 +1374,7 @@ async function createDepartment(input, actorId) {
 }
 async function updateDepartment(id, input, actorId) {
   return database().transaction(async (tx) => {
-    const [row] = await tx.update(departments).set(input).where(eq3(departments.id, id)).returning();
+    const [row] = await tx.update(departments).set(input).where(eq4(departments.id, id)).returning();
     if (!row) throw new AppError(404, "NOT_FOUND", "Department not found.");
     await tx.insert(auditLogs).values({ actorUserId: actorId, action: row.isActive ? "department.updated" : "department.deactivated", entityType: "departments", entityId: id });
     return row;
@@ -1295,98 +1424,26 @@ async function organizationRoutes(app2) {
   });
 }
 
-// src/modules/users/accounts.service.ts
-import { and as and3, count as count2, eq as eq4, ilike as ilike2, ne, or as or3 } from "drizzle-orm";
-
-// src/modules/users/account-rules.ts
-function canSetStatus(from, to) {
-  return from === "pending" && to === "active" || from === "active" && (to === "suspended" || to === "archived") || from === "suspended" && (to === "active" || to === "archived");
-}
-
-// src/modules/users/accounts.service.ts
-async function listManageableUsers(input) {
-  const filter = and3(
-    ne(users.role, "super_admin"),
-    input.status ? eq4(users.accountStatus, input.status) : void 0,
-    input.q ? or3(
-      ilike2(users.firstName, `%${input.q}%`),
-      ilike2(users.lastName, `%${input.q}%`),
-      ilike2(users.institutionalId, `%${input.q}%`)
-    ) : void 0
-  );
-  const [rows, totals] = await Promise.all([
-    database().select({
-      id: users.id,
-      institutionalId: users.institutionalId,
-      role: users.role,
-      personType: users.personType,
-      firstName: users.firstName,
-      lastName: users.lastName,
-      email: users.email,
-      accountStatus: users.accountStatus,
-      createdAt: users.createdAt
-    }).from(users).where(filter).orderBy(users.createdAt).limit(input.limit).offset((input.page - 1) * input.limit),
-    database().select({ total: count2() }).from(users).where(filter)
-  ]);
-  return {
-    data: rows,
-    total: totals[0].total,
-    page: input.page,
-    limit: input.limit
-  };
-}
-async function changeUserStatus(id, input, actorId) {
-  return database().transaction(async (tx) => {
-    const [target] = await tx.select().from(users).where(eq4(users.id, id)).for("update").limit(1);
-    if (!target) throw new AppError(404, "NOT_FOUND", "User not found.");
-    if (target.role === "super_admin")
-      throw new AppError(
-        403,
-        "FORBIDDEN",
-        "Super Admin accounts cannot be changed here."
-      );
-    if (!canSetStatus(target.accountStatus, input.status))
-      throw new AppError(
-        409,
-        "INVALID_STATUS",
-        "This account status change is not allowed."
-      );
-    const [row] = await tx.update(users).set({
-      accountStatus: input.status,
-      archivedAt: input.status === "archived" ? (/* @__PURE__ */ new Date()).toISOString() : null
-    }).where(eq4(users.id, id)).returning({ id: users.id, accountStatus: users.accountStatus });
-    await tx.insert(auditLogs).values({
-      actorUserId: actorId,
-      action: `user.${input.status}`,
-      entityType: "users",
-      entityId: id,
-      metadata: { previousStatus: target.accountStatus }
-    });
-    await tx.insert(notifications).values({
-      userId: id,
-      notificationType: "account_status",
-      title: "Account status changed",
-      message: input.status === "active" ? "Your LSMS account is active." : `Your LSMS account is ${input.status}.`,
-      relatedEntityType: "users",
-      relatedEntityId: id
-    });
-    return row;
-  });
-}
-
 // src/modules/users/accounts.routes.ts
 async function accountsRoutes(app2) {
   app2.get("/api/v1/users/", async (request) => {
-    await requirePermission(request, "users.manage");
-    return listManageableUsers(userListQuery.parse(request.query));
+    const actor = await requireActiveProfile(request);
+    if (!can(actor.role, "users.manage") && !can(actor.role, "users.manage_all")) throw new AppError(403, "FORBIDDEN", "You cannot view user accounts.");
+    return listManageableUsers(userListQuery.parse(request.query), actor.role);
   });
   app2.post("/api/v1/users/:id/status/", async (request) => {
-    const actor = await requirePermission(request, "users.manage");
+    const actor = await requireActiveProfile(request);
+    if (!can(actor.role, "users.manage") && !can(actor.role, "users.manage_all")) throw new AppError(403, "FORBIDDEN", "You cannot manage account statuses.");
     return changeUserStatus(
       uuidParam.parse(request.params).id,
       userStatusInput.parse(request.body),
-      actor.id
+      actor.id,
+      actor.role
     );
+  });
+  app2.patch("/api/v1/users/:id/", async (request) => {
+    const actor = await requirePermission(request, "users.manage_all");
+    return updateAccountDetails(uuidParam.parse(request.params).id, profileUpdateInput.parse(request.body), actor.id, actor.role);
   });
 }
 
@@ -1602,7 +1659,7 @@ async function equipmentRoutes(app2) {
 }
 
 // src/modules/borrowing/custody.service.ts
-import { and as and5, count as count4, eq as eq7, inArray, sql as sql3 } from "drizzle-orm";
+import { and as and5, count as count4, eq as eq7, inArray, sql as sql4 } from "drizzle-orm";
 
 // src/modules/borrowing/rules.ts
 function canCancelRequest(status) {
@@ -1630,7 +1687,7 @@ async function allocateAsset(requestId, actorId, input) {
     const [overlap] = await tx.select({ id: borrowAllocations.id }).from(borrowAllocations).where(and5(
       eq7(borrowAllocations.equipmentAssetId, input.assetId),
       inArray(borrowAllocations.allocationStatus, ["reserved", "released"]),
-      sql3`${borrowAllocations.reservationPeriod} && tstzrange(${request.requestedBorrowAt}::timestamptz, ${request.requestedDueAt}::timestamptz, '[)')`
+      sql4`${borrowAllocations.reservationPeriod} && tstzrange(${request.requestedBorrowAt}::timestamptz, ${request.requestedDueAt}::timestamptz, '[)')`
     )).limit(1);
     if (overlap) throw new AppError(409, "ALLOCATION_CONFLICT", "This equipment is already reserved for an overlapping schedule.");
     const [allocated] = await tx.select({ total: count4() }).from(borrowAllocations).where(and5(eq7(borrowAllocations.borrowRequestItemId, item.id), inArray(borrowAllocations.allocationStatus, ["reserved", "released"])));
@@ -1638,7 +1695,7 @@ async function allocateAsset(requestId, actorId, input) {
     const [row] = await tx.insert(borrowAllocations).values({
       borrowRequestItemId: item.id,
       equipmentAssetId: asset.id,
-      reservationPeriod: sql3`tstzrange(${request.requestedBorrowAt}::timestamptz, ${request.requestedDueAt}::timestamptz, '[)')`,
+      reservationPeriod: sql4`tstzrange(${request.requestedBorrowAt}::timestamptz, ${request.requestedDueAt}::timestamptz, '[)')`,
       allocatedBy: actorId
     }).returning();
     const items = await tx.select({ id: borrowRequestItems.id, quantityApproved: borrowRequestItems.quantityApproved }).from(borrowRequestItems).where(eq7(borrowRequestItems.borrowRequestId, requestId));
@@ -1714,7 +1771,7 @@ async function processReturn(actorId, input) {
       outcome: input.outcome,
       remarks: input.remarks ?? null
     }).returning();
-    const [totals] = await tx.select({ total: count4(), returned: sql3`count(*) filter (where ${borrowAllocations.allocationStatus} = 'returned')::int` }).from(borrowAllocations).innerJoin(borrowRequestItems, eq7(borrowAllocations.borrowRequestItemId, borrowRequestItems.id)).where(and5(eq7(borrowRequestItems.borrowRequestId, request.id), inArray(borrowAllocations.allocationStatus, ["released", "returned"])));
+    const [totals] = await tx.select({ total: count4(), returned: sql4`count(*) filter (where ${borrowAllocations.allocationStatus} = 'returned')::int` }).from(borrowAllocations).innerJoin(borrowRequestItems, eq7(borrowAllocations.borrowRequestItemId, borrowRequestItems.id)).where(and5(eq7(borrowRequestItems.borrowRequestId, request.id), inArray(borrowAllocations.allocationStatus, ["released", "returned"])));
     const status = returnRequestStatus(totals.total, totals.returned);
     await tx.update(borrowRequests).set({ status }).where(eq7(borrowRequests.id, request.id));
     await tx.insert(auditLogs).values({
@@ -1805,6 +1862,7 @@ async function listRequests(input, actor) {
   if (actor.role === "admin") throw new AppError(403, "FORBIDDEN", "Borrowing operations are restricted to the Super Admin.");
   const filter = and6(
     actor.role === "student_faculty" ? eq8(borrowRequests.borrowerId, actor.id) : void 0,
+    input.history ? inArray2(borrowRequests.status, ["rejected", "returned", "cancelled"]) : void 0,
     input.status ? eq8(borrowRequests.status, input.status) : void 0,
     input.q ? or5(ilike4(borrowRequests.requestNumber, `%${input.q}%`), ilike4(borrowRequests.purpose, `%${input.q}%`)) : void 0
   );
@@ -2291,7 +2349,7 @@ async function notificationRoutes(app2) {
 }
 
 // src/modules/analytics/analytics.routes.ts
-import { sql as sql4 } from "drizzle-orm";
+import { sql as sql5 } from "drizzle-orm";
 import { z as z4 } from "zod";
 var analyticsViews = {
   "borrowing-trends": "vw_borrowing_trends_monthly",
@@ -2323,10 +2381,10 @@ async function analyticsRoutes(app2) {
     await requirePermission(request, "analytics.read");
     const key = z4.enum(Object.keys(analyticsViews)).parse(request.params.key);
     const { page, limit } = listQuery.parse(request.query);
-    const view = sql4.raw(analyticsViews[key]);
+    const view = sql5.raw(analyticsViews[key]);
     const [data, totals] = await Promise.all([
-      database().execute(sql4`select * from ${view} limit ${limit} offset ${(page - 1) * limit}`),
-      database().execute(sql4`select count(*)::int as total from ${view}`)
+      database().execute(sql5`select * from ${view} limit ${limit} offset ${(page - 1) * limit}`),
+      database().execute(sql5`select count(*)::int as total from ${view}`)
     ]);
     return { data: Array.from(data), total: Number(totals[0].total), page, limit };
   });
@@ -2335,10 +2393,10 @@ async function analyticsRoutes(app2) {
     const key = z4.enum(Object.keys(reports)).parse(request.params.key);
     if (!reports[key].roles.includes(actor.role)) throw new AppError(403, "FORBIDDEN", "This report is not available to your role.");
     const { page, limit } = listQuery.parse(request.query);
-    const source = sql4.raw(reports[key].source);
+    const source = sql5.raw(reports[key].source);
     const [data, totals] = await Promise.all([
-      database().execute(sql4`select * from ${source} limit ${limit} offset ${(page - 1) * limit}`),
-      database().execute(sql4`select count(*)::int as total from ${source}`)
+      database().execute(sql5`select * from ${source} limit ${limit} offset ${(page - 1) * limit}`),
+      database().execute(sql5`select count(*)::int as total from ${source}`)
     ]);
     return { data: Array.from(data), total: Number(totals[0].total), page, limit };
   });
@@ -2346,7 +2404,7 @@ async function analyticsRoutes(app2) {
     const actor = await requireActiveProfile(request);
     const key = z4.enum(Object.keys(reports)).parse(request.params.key);
     if (!reports[key].roles.includes(actor.role)) throw new AppError(403, "FORBIDDEN", "This report is not available to your role.");
-    const rows = await database().execute(sql4`select * from ${sql4.raw(reports[key].source)} limit 10000`);
+    const rows = await database().execute(sql5`select * from ${sql5.raw(reports[key].source)} limit 10000`);
     const data = Array.from(rows);
     const columns = data.length ? Object.keys(data[0]) : [];
     const csv = [columns.map(csvCell).join(","), ...data.map((row) => columns.map((column) => csvCell(row[column])).join(","))].join("\r\n");
@@ -2357,19 +2415,21 @@ async function analyticsRoutes(app2) {
 }
 
 // src/modules/analytics/dashboard.routes.ts
-import { sql as sql5 } from "drizzle-orm";
+import { sql as sql6 } from "drizzle-orm";
 async function dashboardRoutes(app2) {
   app2.get("/api/v1/dashboard/", async (request) => {
     const actor = await requireActiveProfile(request);
     if (actor.role === "super_admin") {
-      const [requests2, custody2, overdue, returns] = await Promise.all([
-        database().execute(sql5`select status::text as status, count(*)::int as total from borrow_requests group by status`),
-        database().execute(sql5`select count(*)::int as total from vw_current_custody`),
-        database().execute(sql5`select count(*)::int as total from vw_overdue_loans`),
-        database().execute(sql5`select count(*)::int as total from return_records where returned_at > now() - interval '7 days'`)
+      const [requests2, custody2, overdue, returns, audit, activity] = await Promise.all([
+        database().execute(sql6`select status::text as status, count(*)::int as total from borrow_requests group by status`),
+        database().execute(sql6`select count(*)::int as total from vw_current_custody`),
+        database().execute(sql6`select count(*)::int as total from vw_overdue_loans`),
+        database().execute(sql6`select count(*)::int as total from return_records where returned_at > now() - interval '7 days'`),
+        database().execute(sql6`select count(*)::int as total, count(*) filter (where u.role = 'admin')::int as admin_total from audit_logs a left join users u on u.id = a.actor_user_id`),
+        database().execute(sql6`select a.id, a.action, a.entity_type as "entityType", a.created_at as "createdAt", u.first_name as "firstName", u.last_name as "lastName", u.role as "actorRole" from audit_logs a left join users u on u.id = a.actor_user_id order by a.created_at desc, a.id desc limit 8`)
       ]);
       const countStatus2 = (status) => Number(requests2.find((row) => row.status === status)?.total ?? 0);
-      return { cards: [
+      return { audit: { total: Number(audit[0]?.total ?? 0), adminTotal: Number(audit[0]?.admin_total ?? 0), recent: activity }, cards: [
         { label: "Submitted requests", value: countStatus2("submitted") },
         { label: "Under review", value: countStatus2("under_review") },
         { label: "Ready for release", value: countStatus2("ready_for_release") },
@@ -2380,9 +2440,9 @@ async function dashboardRoutes(app2) {
     }
     if (actor.role === "admin") {
       const [assets, pending, usage] = await Promise.all([
-        database().execute(sql5`select availability_status, count(*)::int as total from vw_equipment_asset_availability group by availability_status`),
-        database().execute(sql5`select count(*)::int as total from users where account_status = 'pending'`),
-        database().execute(sql5`select coalesce(sum(total_borrow_count), 0)::int as total from vw_equipment_usage`)
+        database().execute(sql6`select availability_status, count(*)::int as total from vw_equipment_asset_availability group by availability_status`),
+        database().execute(sql6`select count(*)::int as total from users where account_status = 'pending'`),
+        database().execute(sql6`select coalesce(sum(total_borrow_count), 0)::int as total from vw_equipment_usage`)
       ]);
       const countState = (state) => Number(assets.find((row) => row.availability_status === state)?.total ?? 0);
       return { cards: [
@@ -2396,9 +2456,9 @@ async function dashboardRoutes(app2) {
       ] };
     }
     const [requests, custody, notifications2] = await Promise.all([
-      database().execute(sql5`select status::text as status, count(*)::int as total from borrow_requests where borrower_id = ${actor.id}::uuid group by status`),
-      database().execute(sql5`select count(*)::int as total from vw_current_custody where borrower_id = ${actor.id}::uuid`),
-      database().execute(sql5`select count(*)::int as total from notifications where user_id = ${actor.id}::uuid and read_at is null`)
+      database().execute(sql6`select status::text as status, count(*)::int as total from borrow_requests where borrower_id = ${actor.id}::uuid group by status`),
+      database().execute(sql6`select count(*)::int as total from vw_current_custody where borrower_id = ${actor.id}::uuid`),
+      database().execute(sql6`select count(*)::int as total from notifications where user_id = ${actor.id}::uuid and read_at is null`)
     ]);
     const countStatus = (status) => Number(requests.find((row) => row.status === status)?.total ?? 0);
     return { cards: [
@@ -2408,6 +2468,102 @@ async function dashboardRoutes(app2) {
       { label: "Assets in custody", value: Number(custody[0].total) },
       { label: "Unread notifications", value: Number(notifications2[0].total) }
     ] };
+  });
+}
+
+// src/modules/analytics/audit.routes.ts
+import { and as and8, count as count8, desc as desc4, eq as eq11, ilike as ilike5, inArray as inArray3, or as or6, sql as sql7 } from "drizzle-orm";
+import { z as z5 } from "zod";
+
+// src/modules/analytics/audit-scope.ts
+function auditScope(viewerRole, requestedRole) {
+  if (viewerRole === "admin") return { visibleRole: "student_faculty", deny: Boolean(requestedRole && requestedRole !== "student_faculty") };
+  return { visibleRole: requestedRole, deny: false };
+}
+
+// src/modules/analytics/audit.routes.ts
+var querySchema = z5.object({
+  page: z5.coerce.number().int().min(1).default(1),
+  limit: z5.coerce.number().int().min(1).max(100).default(20),
+  q: z5.string().trim().max(100).default(""),
+  role: z5.enum(["admin", "student_faculty", "super_admin"]).optional()
+});
+async function auditRoutes(app2) {
+  app2.get("/api/v1/audit/", async (request) => {
+    const viewer = await requirePermission(request, "audit.read");
+    const input = querySchema.parse(request.query);
+    const scope = auditScope(viewer.role, input.role);
+    const filter = and8(
+      scope.visibleRole ? eq11(users.role, scope.visibleRole) : void 0,
+      scope.deny ? sql7`false` : void 0,
+      input.q ? or6(ilike5(auditLogs.action, `%${input.q}%`), ilike5(users.firstName, `%${input.q}%`), ilike5(users.lastName, `%${input.q}%`), ilike5(users.institutionalId, `%${input.q}%`), sql7`${auditLogs.metadata}::text ilike ${`%${input.q}%`}`, sql7`${auditLogs.entityId}::text ilike ${`%${input.q}%`}`) : void 0
+    );
+    const [rows, totals] = await Promise.all([
+      database().select({
+        id: auditLogs.id,
+        action: auditLogs.action,
+        entityType: auditLogs.entityType,
+        entityId: auditLogs.entityId,
+        metadata: auditLogs.metadata,
+        createdAt: auditLogs.createdAt,
+        actorId: auditLogs.actorUserId,
+        actorFirstName: users.firstName,
+        actorLastName: users.lastName,
+        actorInstitutionalId: users.institutionalId,
+        actorRole: users.role
+      }).from(auditLogs).leftJoin(users, eq11(auditLogs.actorUserId, users.id)).where(filter).orderBy(desc4(auditLogs.createdAt), desc4(auditLogs.id)).limit(input.limit).offset((input.page - 1) * input.limit),
+      database().select({ total: count8() }).from(auditLogs).leftJoin(users, eq11(auditLogs.actorUserId, users.id)).where(filter)
+    ]);
+    const idsFor = (type) => rows.filter((row) => row.entityType === type && row.entityId).map((row) => row.entityId);
+    const names = /* @__PURE__ */ new Map();
+    const addNames = (type, values) => values.forEach((value) => names.set(`${type}:${value.id}`, value.label));
+    await Promise.all([
+      (async () => {
+        const ids = idsFor("users");
+        if (ids.length) addNames("users", (await database().select({ id: users.id, firstName: users.firstName, lastName: users.lastName }).from(users).where(inArray3(users.id, ids))).map((row) => ({ id: row.id, label: `${row.firstName} ${row.lastName}` })));
+      })(),
+      (async () => {
+        const ids = idsFor("colleges");
+        if (ids.length) addNames("colleges", await database().select({ id: colleges.id, label: colleges.name }).from(colleges).where(inArray3(colleges.id, ids)));
+      })(),
+      (async () => {
+        const ids = idsFor("courses");
+        if (ids.length) addNames("courses", await database().select({ id: courses.id, label: courses.name }).from(courses).where(inArray3(courses.id, ids)));
+      })(),
+      (async () => {
+        const ids = idsFor("departments");
+        if (ids.length) addNames("departments", await database().select({ id: departments.id, label: departments.name }).from(departments).where(inArray3(departments.id, ids)));
+      })(),
+      (async () => {
+        const ids = idsFor("equipment_categories");
+        if (ids.length) addNames("equipment_categories", await database().select({ id: equipmentCategories.id, label: equipmentCategories.name }).from(equipmentCategories).where(inArray3(equipmentCategories.id, ids)));
+      })(),
+      (async () => {
+        const ids = idsFor("equipment_catalog");
+        if (ids.length) addNames("equipment_catalog", await database().select({ id: equipmentCatalog.id, label: equipmentCatalog.equipmentName }).from(equipmentCatalog).where(inArray3(equipmentCatalog.id, ids)));
+      })(),
+      (async () => {
+        const ids = idsFor("equipment_assets");
+        if (ids.length) addNames("equipment_assets", (await database().select({ id: equipmentAssets.id, code: equipmentAssets.assetCode, equipment: equipmentCatalog.equipmentName }).from(equipmentAssets).innerJoin(equipmentCatalog, eq11(equipmentAssets.equipmentCatalogId, equipmentCatalog.id)).where(inArray3(equipmentAssets.id, ids))).map((row) => ({ id: row.id, label: `${row.equipment} \xB7 ${row.code}` })));
+      })(),
+      (async () => {
+        const ids = idsFor("borrow_requests");
+        if (ids.length) addNames("borrow_requests", (await database().select({ id: borrowRequests.id, number: borrowRequests.requestNumber, borrowerFirst: users.firstName, borrowerLast: users.lastName }).from(borrowRequests).innerJoin(users, eq11(borrowRequests.borrowerId, users.id)).where(inArray3(borrowRequests.id, ids))).map((row) => ({ id: row.id, label: `${row.number} \xB7 ${row.borrowerFirst} ${row.borrowerLast}` })));
+      })(),
+      (async () => {
+        const ids = idsFor("borrow_allocations");
+        if (ids.length) addNames("borrow_allocations", (await database().select({ id: borrowAllocations.id, code: equipmentAssets.assetCode, number: borrowRequests.requestNumber }).from(borrowAllocations).innerJoin(equipmentAssets, eq11(borrowAllocations.equipmentAssetId, equipmentAssets.id)).innerJoin(borrowRequestItems, eq11(borrowAllocations.borrowRequestItemId, borrowRequestItems.id)).innerJoin(borrowRequests, eq11(borrowRequestItems.borrowRequestId, borrowRequests.id)).where(inArray3(borrowAllocations.id, ids))).map((row) => ({ id: row.id, label: `${row.code} for request ${row.number}` })));
+      })(),
+      (async () => {
+        const ids = idsFor("return_records");
+        if (ids.length) addNames("return_records", (await database().select({ id: returnRecords.id, code: equipmentAssets.assetCode, number: borrowRequests.requestNumber }).from(returnRecords).innerJoin(borrowAllocations, eq11(returnRecords.allocationId, borrowAllocations.id)).innerJoin(equipmentAssets, eq11(borrowAllocations.equipmentAssetId, equipmentAssets.id)).innerJoin(borrowRequestItems, eq11(borrowAllocations.borrowRequestItemId, borrowRequestItems.id)).innerJoin(borrowRequests, eq11(borrowRequestItems.borrowRequestId, borrowRequests.id)).where(inArray3(returnRecords.id, ids))).map((row) => ({ id: row.id, label: `${row.code} for request ${row.number}` })));
+      })(),
+      (async () => {
+        const ids = idsFor("iso_requisitions");
+        if (ids.length) addNames("iso_requisitions", await database().select({ id: isoRequisitions.id, label: isoRequisitions.formNumber }).from(isoRequisitions).where(inArray3(isoRequisitions.id, ids)));
+      })()
+    ]);
+    return { data: rows.map((row) => ({ ...row, targetLabel: row.entityId ? names.get(`${row.entityType}:${row.entityId}`) ?? null : null })), total: totals[0]?.total ?? 0, page: input.page, limit: input.limit };
   });
 }
 
@@ -2440,9 +2596,14 @@ async function createApp() {
       if (request.method === "POST" && request.url.startsWith("/api/auth/sign-up/email")) {
         throw new AppError(403, "USE_REGISTRATION", "Use the LSMS registration form.");
       }
+      if (request.method === "POST" && (request.url.startsWith("/api/auth/update-user") || request.url.startsWith("/api/auth/change-email"))) {
+        throw new AppError(403, "USE_PROFILE", "Use the LSMS profile form to update account details.");
+      }
       if (request.method === "POST" && request.url.startsWith("/api/auth/change-password")) {
         strongPassword.parse(request.body?.newPassword);
       }
+      const passwordChange = request.method === "POST" && request.url.startsWith("/api/auth/change-password");
+      const passwordSession = passwordChange ? await auth.api.getSession({ headers: fromNodeHeaders2(request.headers) }) : null;
       const url = new URL(request.url, env3.BETTER_AUTH_URL);
       const headers = fromNodeHeaders2(request.headers);
       const response = await auth.handler(new Request(url, {
@@ -2450,6 +2611,14 @@ async function createApp() {
         headers,
         ...request.body ? { body: JSON.stringify(request.body) } : {}
       }));
+      if (passwordChange && response.ok && passwordSession) {
+        try {
+          const [actor] = await database().select({ id: users.id }).from(users).where(eq12(users.authUserId, passwordSession.user.id)).limit(1);
+          if (actor) await database().insert(auditLogs).values({ actorUserId: actor.id, action: "profile.password_changed", entityType: "users", entityId: actor.id });
+        } catch (error) {
+          request.log.error({ error }, "Password changed but audit insert failed");
+        }
+      }
       reply.code(response.status);
       response.headers.forEach((value, key) => {
         if (key.toLowerCase() !== "set-cookie") reply.header(key, value);
@@ -2468,6 +2637,7 @@ async function createApp() {
   await app2.register(notificationRoutes);
   await app2.register(analyticsRoutes);
   await app2.register(dashboardRoutes);
+  await app2.register(auditRoutes);
   return app2;
 }
 

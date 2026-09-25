@@ -1,4 +1,5 @@
 "use client";
+import { LoadingBars } from "@/components/ui/loading-skeleton";
 
 import { ErrorNotice } from "@/components/ui/error-notice";
 import { Pagination } from "@/components/ui/pagination";
@@ -139,7 +140,7 @@ export function CategoriesManager() {
           Search
         </button>
       </form>
-      <details ref={editor} className="ui-panel max-w-4xl"><summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-green-800">{editing ? "Edit category" : "Add category"}</summary><form
+      <details ref={editor} className="ui-panel"><summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-green-800">{editing ? "Edit category" : "Add category"}</summary><form
         onSubmit={save}
         className="border-t border-slate-200 p-4 sm:p-5"
       >
@@ -200,13 +201,11 @@ export function CategoriesManager() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={4} className="p-8 text-center">
-                  Loading…
-                </td>
+                <td colSpan={4} className="p-8 text-center"><LoadingBars /></td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={4} className="p-8 text-center text-slate-500">{error ? "Records could not be loaded. Try again above." : "No categories found."}</td>
+                <td colSpan={4} className="p-8 text-center text-[#526b59]">{error ? "Categories could not be loaded. Try again above." : search ? "No categories match this search. Try another name." : "No categories yet. Open Add category above to create the first one."}</td>
               </tr>
             ) : (
               rows.map((row) => (

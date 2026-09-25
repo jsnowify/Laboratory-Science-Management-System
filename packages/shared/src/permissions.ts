@@ -3,6 +3,7 @@ export type Role = (typeof roles)[number];
 
 export const permissions = {
   "organization.read": ["super_admin"],
+  "audit.read": ["super_admin", "admin"],
   "users.create_admin": ["super_admin"],
   "organization.write": ["super_admin"],
   "borrowing.review": ["super_admin"],
@@ -16,8 +17,9 @@ export const permissions = {
   "accountability.read": ["super_admin"],
   "equipment.write": ["admin"],
   "users.manage": ["admin"],
+  "users.manage_all": ["super_admin"],
   "qr.manage": ["admin"],
-  "analytics.read": ["admin"],
+  "analytics.read": ["admin", "super_admin"],
   "reports.read": ["admin"],
   "equipment.read": ["student_faculty", "admin", "super_admin"],
   "borrow_request.create": ["student_faculty"],

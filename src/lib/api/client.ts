@@ -6,7 +6,7 @@ export class ApiError extends Error {
 
 export function apiPath(path: string) {
   const normalized = `/${path.replace(/^\/+|\/+$/g, "")}/`;
-  if (!normalized.startsWith("/api/v1/")) throw new Error("Use a versioned LSMS API path");
+  if (!normalized.startsWith("/api/v1/") || /[?#\\%]/.test(normalized) || normalized.split("/").some((part) => part === "." || part === "..")) throw new Error("Use a versioned LSMS API path");
   return normalized;
 }
 

@@ -13,10 +13,10 @@ type Toast = { id: number; message: string; tone: Tone };
 const Context = createContext<Feedback | null>(null);
 const icons = { success: CheckCircle2, error: AlertCircle, warning: TriangleAlert, info: Info };
 const toneStyles = {
-  success: "border-green-200 text-green-900",
-  error: "border-red-200 text-red-900",
-  warning: "border-amber-200 text-amber-900",
-  info: "border-slate-200 text-slate-900",
+  success: "border-[#cfe6cd] text-[#205137]",
+  error: "border-[#f2c9c4] text-[#922b25]",
+  warning: "border-[#f0dfa8] text-[#795418]",
+  info: "border-[#d4e4d4] text-[#385b48]",
 };
 
 export function FeedbackProvider({ children }: { children: ReactNode }) {
@@ -54,10 +54,11 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
     <ConnectionStatus />
     <Dialog.Root open={Boolean(dialog)} onOpenChange={(open) => { if (!open) close(false); }}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-slate-950/45" />
-        <Dialog.Content onOpenAutoFocus={(event) => { event.preventDefault(); cancelButton.current?.focus(); }} onCloseAutoFocus={(event) => { event.preventDefault(); previousFocus.current?.focus(); }} className="fixed inset-x-4 top-1/2 z-50 mx-auto max-h-[90dvh] w-auto max-w-md -translate-y-1/2 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl outline-none">
-          <Dialog.Title className="text-lg font-semibold text-slate-950">{dialog?.title}</Dialog.Title>
-          <Dialog.Description className="mt-2 text-sm leading-6 text-slate-600">{dialog?.description}</Dialog.Description>
+        <Dialog.Overlay className="feedback-overlay fixed inset-0 z-50 bg-[#14291b]/55 backdrop-blur-[3px]" />
+        <Dialog.Content onOpenAutoFocus={(event) => { event.preventDefault(); cancelButton.current?.focus(); }} onCloseAutoFocus={(event) => { event.preventDefault(); previousFocus.current?.focus(); }} className="feedback-dialog fixed inset-x-4 top-1/2 z-50 mx-auto max-h-[90dvh] w-auto max-w-md -translate-y-1/2 overflow-y-auto rounded-[15px] border border-[#dce8db] bg-[#fffef9] p-6 shadow-[0_24px_80px_rgba(17,45,26,.24)] outline-none sm:p-8">
+          <span className={`mb-5 flex size-12 items-center justify-center rounded-2xl ${dialog?.tone === "danger" ? "bg-[#fff0ed] text-[#a3342c]" : "bg-[#e9f2e5] text-[#28603e]"}`}>{dialog?.tone === "danger" ? <TriangleAlert size={24} aria-hidden="true" /> : <Info size={24} aria-hidden="true" />}</span>
+          <Dialog.Title className="font-[Georgia,serif] text-[1.65rem] leading-tight tracking-[-.04em] text-[#1b3426]">{dialog?.title}</Dialog.Title>
+          <Dialog.Description className="mt-3 text-sm leading-6 text-[#536b59]">{dialog?.description}</Dialog.Description>
           <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <button ref={cancelButton} type="button" className="ui-button-secondary" onClick={() => close(false)}>Keep working</button>
             <button type="button" className={dialog?.tone === "danger" ? "ui-button-danger" : "ui-button-primary"} onClick={() => close(true)}>{dialog?.confirmLabel}</button>
@@ -68,8 +69,8 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
     <div className="pointer-events-none fixed inset-x-4 bottom-4 z-[60] mx-auto flex max-w-sm flex-col gap-2 sm:left-auto sm:right-5 sm:mx-0" aria-live="polite">
       {toasts.map((item) => {
         const Icon = icons[item.tone];
-        return <div key={item.id} role={item.tone === "error" ? "alert" : "status"} className={`pointer-events-auto flex items-start gap-3 rounded-xl border bg-white p-4 text-sm shadow-lg ${toneStyles[item.tone]}`}>
-          <Icon size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
+        return <div key={item.id} role={item.tone === "error" ? "alert" : "status"} className={`feedback-toast pointer-events-auto flex items-start gap-3 rounded-2xl border bg-[#fffef9] p-3 text-sm shadow-[0_16px_45px_rgba(17,45,26,.16)] sm:p-4 ${toneStyles[item.tone]}`}>
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-current/10"><Icon size={18} aria-hidden="true" /></span>
           <span className="min-w-0 flex-1 break-words">{item.message}</span>
           <button type="button" className="grid size-11 shrink-0 place-items-center rounded" aria-label="Dismiss message" onClick={() => setToasts((items) => items.filter((entry) => entry.id !== item.id))}><X size={16} /></button>
         </div>;

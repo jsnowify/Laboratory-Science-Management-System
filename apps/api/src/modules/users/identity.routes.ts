@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
-import { registrationInput, setupInput, staffInput } from "@lsms/shared";
+import { profileUpdateInput, registrationInput, setupInput, staffInput } from "@lsms/shared";
 import { requirePermission } from "../../auth/authorize";
-import { requireProfile } from "../../auth/authorize";
+import { requireActiveProfile, requireProfile } from "../../auth/authorize";
+import { updateAccountDetails } from "./accounts.service";
 import {
   createAdmin,
   createFirstSuperAdmin,
@@ -47,6 +48,11 @@ export async function identityRoutes(app: FastifyInstance) {
       email: profile.email,
       accountStatus: profile.accountStatus,
     };
+  });
+
+  app.patch("/api/v1/me/", async (request) => {
+    const actor = await requireActiveProfile(request);
+    return updateAccountDetails(actor.id, profileUpdateInput.parse(request.body), actor.id, actor.role);
   });
 
   app.post("/api/v1/staff/", async (request, reply) => {
